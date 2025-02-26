@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, FlatList, Animated, TextInput, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, FlatList, Animated, TextInput, Alert, Platform } from 'react-native';
 import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Phone, Mail } from 'lucide-react';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import SidebarLayout from '@/components/SidebarLayout';
+import SidebarLayout, { useSchoolContext } from '@/components/SidebarLayout';
 
 // Define interface for Driver based on Firestore structure
 interface Driver {
@@ -38,6 +38,7 @@ const fetchDrivers = (): Promise<Driver[]> => {
 };
 
 export default function DriversScreen() {
+  const { schoolName = 'School' } = useSchoolContext();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<Driver[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +48,7 @@ export default function DriversScreen() {
   const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
   
   // Animation for content fade-in
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Fetch drivers on component mount
@@ -203,10 +204,14 @@ export default function DriversScreen() {
           <View style={styles.searchContainer}>
             <Search size={20} color="#6B7280" />
             <TextInput
-              style={styles.searchInput}
+              style={[
+                styles.searchInput,
+                Platform.OS === 'web' ? { outline: 'none' } : {}
+              ]}
               placeholder="Search drivers..."
               value={searchQuery}
               onChangeText={setSearchQuery}
+              placeholderTextColor="#6B7280"
             />
           </View>
           
@@ -301,6 +306,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#4B5563',
+    height: 40,
+    // We'll handle the outline removal in the component
   },
   filterButton: {
     flexDirection: 'row',

@@ -4,7 +4,7 @@ import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import SidebarLayout from '@/components/SidebarLayout';
+import SidebarLayout, { useSchoolContext } from '@/components/SidebarLayout';
 
 // Define interfaces for type safety based on Firestore structure
 interface Driver {
@@ -78,13 +78,14 @@ const fetchCollection = <T,>(collection: string): Promise<T[]> => {
 };
 
 export default function HomeScreen() {
+  const { schoolName = 'School' } = useSchoolContext();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Animation for content fade-in
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Fetch data on component mount
@@ -243,9 +244,9 @@ export default function HomeScreen() {
   return (
     <SidebarLayout>
       <View style={styles.mainContent}>
-        {/* Header - Only showing the title centered */}
+        {/* Header - Now using the schoolName prop */}
         <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>{'{School}'} Dashboard</ThemedText>
+          <ThemedText type="title" style={styles.headerTitle}>{schoolName} Dashboard</ThemedText>
         </View>
         
         {/* Main content */}
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '500',
     fontSize: 20,
-    color: '#000000', // Black color as requested
+    color: '#000000',
   },
   contentContainer: {
     flex: 1,

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
 import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import SidebarLayout, { useSchoolContext } from '@/components/SidebarLayout';
+import { useSchoolContext } from '@/components/SchoolProvider';
 
 // Define interfaces for type safety based on Firestore structure
 interface Driver {
@@ -78,7 +80,8 @@ const fetchCollection = <T,>(collection: string): Promise<T[]> => {
 };
 
 export default function HomeScreen() {
-  const { schoolName = 'School' } = useSchoolContext();
+  const { schoolName } = useSchoolContext();
+  const navigation = useNavigation();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -119,6 +122,10 @@ export default function HomeScreen() {
   const navigateToDetailView = (path: AppRoute) => {
     router.push(path);
   };
+
+  const toggleDrawer = () => {
+    navigation.dispatch(DrawerActions.toggleDrawer());
+  }
 
   const renderDrivers = () => {
     return (
@@ -242,31 +249,32 @@ export default function HomeScreen() {
   };
 
   return (
-    <SidebarLayout>
-      <View style={styles.mainContent}>
-        {/* Header - Now using the schoolName prop */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>{schoolName} Dashboard</ThemedText>
-        </View>
-        
-        {/* Main content */}
-        <ScrollView style={styles.scrollView}>
-          {renderStats()}
-          <View style={styles.gridContainer}>
-            <View style={styles.column}>
-              {renderDrivers()}
-            </View>
-            <View style={styles.column}>
-              {renderRoutes()}
-            </View>
-            <View style={styles.column}>
-              {renderUsers()}
-              {renderReports()}
-            </View>
-          </View>
-        </ScrollView>
+    <View style={styles.mainContent}>
+      {/* Header with drawer toggle */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={toggleDrawer} style={styles.menuButton}>
+          <Ionicons name="menu" size={24} color="#1f2937" />
+        </TouchableOpacity>
+        <ThemedText type="title" style={styles.headerTitle}>{schoolName} Dashboard</ThemedText>
       </View>
-    </SidebarLayout>
+      
+      {/* Main content */}
+      <ScrollView style={styles.scrollView}>
+        {renderStats()}
+        <View style={styles.gridContainer}>
+          <View style={styles.column}>
+            {renderDrivers()}
+          </View>
+          <View style={styles.column}>
+            {renderRoutes()}
+          </View>
+          <View style={styles.column}>
+            {renderUsers()}
+            {renderReports()}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -284,8 +292,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  menuButton: {
+    marginRight: 16,
   },
   headerTitle: {
     fontWeight: '500',

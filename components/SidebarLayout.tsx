@@ -68,6 +68,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const sidebarWidth = useRef(new Animated.Value(230)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
   const logoutOpacity = useRef(new Animated.Value(0)).current;
+  const logoutScale = useRef(new Animated.Value(0.85)).current;
   const highlightPosition = useRef(new Animated.Value(0)).current;
 
   // Load saved sidebar state on component mount
@@ -137,7 +138,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     }
   };
 
-  // Toggle sidebar open/closed with sequential animations
+  // Toggle sidebar open/closed with animations
   const toggleSidebar = () => {
     if (animating) return; // Prevent multiple triggers during animation
     
@@ -148,36 +149,37 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     saveSidebarState(newState);
     
     if (newState) {
-      // Opening the sidebar - first expand width, then fade in text
-      Animated.sequence([
-        Animated.timing(sidebarWidth, {
-          toValue: 230,
-          duration: 250,
-          useNativeDriver: false,
-        }),
+      // Opening the sidebar
+      Animated.timing(sidebarWidth, {
+        toValue: 230,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+      
+      // Delayed text fade-in for smoother effect
+      setTimeout(() => {
         Animated.timing(textOpacity, {
           toValue: 1,
-          duration: 150,
+          duration: 200,
           useNativeDriver: true,
-        })
-      ]).start(() => {
-        setAnimating(false);
-      });
+        }).start(() => {
+          setAnimating(false);
+        });
+      }, 100);
     } else {
       // Closing the sidebar - first fade out text, then shrink width
-      Animated.sequence([
-        Animated.timing(textOpacity, {
-          toValue: 0,
-          duration: 100,
-          useNativeDriver: true,
-        }),
+      Animated.timing(textOpacity, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: true,
+      }).start(() => {
         Animated.timing(sidebarWidth, {
           toValue: 70,
           duration: 200,
           useNativeDriver: false,
-        })
-      ]).start(() => {
-        setAnimating(false);
+        }).start(() => {
+          setAnimating(false);
+        });
       });
     }
     
@@ -197,20 +199,34 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
   // Show logout button with animation
   const showLogoutButton = () => {
     setShowLogout(true);
-    Animated.timing(logoutOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(logoutOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoutScale, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      })
+    ]).start();
   };
 
   // Hide logout button with animation
   const hideLogout = () => {
-    Animated.timing(logoutOpacity, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(logoutOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoutScale, {
+        toValue: 0.85,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
       setShowLogout(false);
     });
   };
@@ -244,6 +260,49 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     });
   };
 
+  // Render a navigation item
+  const renderNavItem = (route: RouteItem, index: number, isBottomNav: boolean = false) => {
+    const realIndex = isBottomNav ? index + ROUTES.length : index;
+    const isActive = realIndex === activeIndex;
+    
+    return (
+      <TouchableOpacity
+        key={route.path}
+        style={[
+          styles.navItem,
+          sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
+        ]}
+        onPress={(e) => {
+          e.stopPropagation(); // Prevent sidebar toggle
+          navigateTo(route.path);
+        }}
+      >
+        <route.icon 
+          size={20} 
+          color={isActive ? '#FFFFFF' : '#94A3B8'} 
+        />
+        <Animated.View 
+          style={{ 
+            opacity: textOpacity, 
+            marginLeft: 12,
+            flex: 1 
+          }}
+        >
+          {sidebarOpen && (
+            <ThemedText 
+              style={[
+                styles.navLabel, 
+                isActive && styles.activeNavLabel
+              ]}
+            >
+              {route.label}
+            </ThemedText>
+          )}
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Sidebar */}
@@ -254,20 +313,20 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
       >
         <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
           {/* Animated Highlight Background */}
-          <Animated.View 
-            style={[
-              styles.activeHighlight,
-              {
-                top: getHighlightPosition(),
-                opacity: 1,
-                width: sidebarWidth.interpolate({
-                  inputRange: [70, 230],
-                  outputRange: [54, 214]
-                }),
-                left: sidebarOpen ? 8 : 8,
-              }
-            ]} 
-          />
+          {activeIndex !== -1 && (
+            <Animated.View 
+              style={[
+                styles.activeHighlight,
+                {
+                  top: getHighlightPosition(),
+                  width: sidebarWidth.interpolate({
+                    inputRange: [70, 230],
+                    outputRange: [54, 214]
+                  }),
+                }
+              ]} 
+            />
+          )}
         
           {/* Logo section */}
           <View style={styles.sidebarHeader}>
@@ -291,77 +350,12 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
           <View style={styles.navContainer}>
             {/* Top nav items */}
             <View style={styles.navGroup}>
-              {ROUTES.map((route, index) => {
-                const isActive = index === activeIndex;
-                return (
-                  <TouchableOpacity
-                    key={route.path}
-                    style={[
-                      styles.navItem, 
-                      sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
-                    ]}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent sidebar toggle
-                      navigateTo(route.path);
-                    }}
-                  >
-                    <route.icon 
-                      size={20} 
-                      color={isActive ? '#FFFFFF' : '#94A3B8'} 
-                    />
-                    <Animated.View style={{ opacity: textOpacity, marginLeft: 12 }}>
-                      {sidebarOpen && (
-                        <ThemedText 
-                          style={[
-                            styles.navLabel, 
-                            isActive && styles.activeNavLabel
-                          ]}
-                        >
-                          {route.label}
-                        </ThemedText>
-                      )}
-                    </Animated.View>
-                  </TouchableOpacity>
-                );
-              })}
+              {ROUTES.map((route, index) => renderNavItem(route, index))}
             </View>
             
             {/* Bottom nav items */}
             <View style={styles.bottomNavGroup}>
-              {BOTTOM_ROUTES.map((route, index) => {
-                const realIndex = index + ROUTES.length;
-                const isActive = realIndex === activeIndex;
-                return (
-                  <TouchableOpacity
-                    key={route.path}
-                    style={[
-                      styles.navItem, 
-                      sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
-                    ]}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent sidebar toggle
-                      navigateTo(route.path);
-                    }}
-                  >
-                    <route.icon 
-                      size={20} 
-                      color={isActive ? '#FFFFFF' : '#94A3B8'} 
-                    />
-                    <Animated.View style={{ opacity: textOpacity, marginLeft: 12 }}>
-                      {sidebarOpen && (
-                        <ThemedText 
-                          style={[
-                            styles.navLabel, 
-                            isActive && styles.activeNavLabel
-                          ]}
-                        >
-                          {route.label}
-                        </ThemedText>
-                      )}
-                    </Animated.View>
-                  </TouchableOpacity>
-                );
-              })}
+              {BOTTOM_ROUTES.map((route, index) => renderNavItem(route, index, true))}
             </View>
           </View>
           
@@ -384,7 +378,11 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
               <View style={styles.profileIcon}>
                 <User size={20} color="#FFFFFF" />
               </View>
-              <Animated.View style={{ opacity: textOpacity, marginLeft: 12 }}>
+              <Animated.View style={{ 
+                opacity: textOpacity, 
+                marginLeft: 12,
+                flex: 1
+              }}>
                 {sidebarOpen && (
                   <ThemedText style={styles.profileName}>{userName}</ThemedText>
                 )}
@@ -397,7 +395,10 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
                 style={[
                   styles.logoutButtonContainer,
                   sidebarOpen ? styles.logoutContainerExpanded : styles.logoutContainerCollapsed,
-                  { opacity: logoutOpacity }
+                  { 
+                    opacity: logoutOpacity,
+                    transform: [{ scale: logoutScale }]
+                  }
                 ]}
               >
                 <TouchableOpacity 
@@ -407,7 +408,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
                     handleLogout();
                   }}
                 >
-                  <LogOut size={16} color="#EF4444" style={styles.logoutIcon} />
+                  <LogOut size={16} color="#FFFFFF" style={styles.logoutIcon} />
                   <ThemedText style={styles.logoutText}>Logout</ThemedText>
                 </TouchableOpacity>
               </Animated.View>
@@ -449,10 +450,11 @@ const styles = StyleSheet.create({
   },
   activeHighlight: {
     position: 'absolute',
-    height: 44,
+    height: 40,
     backgroundColor: '#304878',
     borderRadius: 8,
     zIndex: 0,
+    left: 8, // Consistent left position
   },
   sidebarHeader: {
     height: 40,
@@ -490,7 +492,7 @@ const styles = StyleSheet.create({
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
+    height: 40,
     marginBottom: 4,
     zIndex: 1,
     borderRadius: 8,
@@ -500,9 +502,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   navItemCollapsed: {
-    justifyContent: 'center',
+    justifyContent: 'center', // Keep centered when collapsed
     alignItems: 'center',
-    paddingHorizontal: 17, // Centered
+    paddingHorizontal: 0, // Reset padding to center icon
   },
   navLabel: {
     fontSize: 14,
@@ -533,7 +535,7 @@ const styles = StyleSheet.create({
   },
   profileSectionCollapsed: {
     justifyContent: 'center',
-    paddingHorizontal: 17, // Centered
+    paddingHorizontal: 0, // Reset for centering
   },
   profileIcon: {
     width: 36,
@@ -553,30 +555,31 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   logoutContainerExpanded: {
-    right: -110,
-    top: 18,
+    right: 12,
+    top: 12,
   },
   logoutContainerCollapsed: {
-    right: -90,
-    top: 18,
+    right: 10,
+    top: 12,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
-    backgroundColor: 'white',
+    backgroundColor: '#304878', // Match sidebar highlight
     borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 5,
+    minWidth: 100,
   },
   logoutIcon: {
     marginRight: 8,
   },
   logoutText: {
-    color: '#EF4444',
+    color: '#FFFFFF', // White text to match sidebar
     fontWeight: '500',
   }
 });

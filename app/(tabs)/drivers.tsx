@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, Animated, TextInput, Alert, Platform } from 'react-native';
 import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Phone, Mail } from 'lucide-react';
-import { router } from 'expo-router';
+import { useNavigation } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import SidebarLayout, { useSchoolContext } from '@/components/SidebarLayout';
+import { useSchoolContext } from '@/components/SchoolProvider';
 
 // Define interface for Driver based on Firestore structure
 interface Driver {
@@ -38,7 +40,8 @@ const fetchDrivers = (): Promise<Driver[]> => {
 };
 
 export default function DriversScreen() {
-  const { schoolName = 'School' } = useSchoolContext();
+  const { schoolName } = useSchoolContext();
+  const navigation = useNavigation();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<Driver[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +91,11 @@ export default function DriversScreen() {
       setFilteredDrivers(drivers);
     }
   }, [searchQuery, drivers]);
+
+  // Toggle drawer
+  const toggleDrawer = () => {
+    navigation.dispatch(DrawerActions.toggleDrawer());
+  };
 
   // Action menu handlers
   const showActionMenu = (driver: Driver, event: any) => {
@@ -181,59 +189,42 @@ export default function DriversScreen() {
   );
 
   return (
-    <SidebarLayout>
-      <View style={styles.mainContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <ThemedText type="title" style={styles.headerTitle}>Drivers</ThemedText>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={handleAddNewDriver}
-            >
-              <Plus size={20} color="white" />
-              <ThemedText style={styles.addButtonText}>Add Driver</ThemedText>
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        {/* Action Bar */}
-        <View style={styles.actionBar}>
-          <View style={styles.searchContainer}>
-            <Search size={20} color="#6B7280" />
-            <TextInput
-              style={[
-                styles.searchInput,
-                Platform.OS === 'web' ? { outline: 'none' } : {}
-              ]}
-              placeholder="Search drivers..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#6B7280"
-            />
-          </View>
-          
-          <TouchableOpacity style={styles.filterButton}>
-            <Filter size={20} color="#6B7280" />
-            <ThemedText style={styles.filterText}>Filter</ThemedText>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Main content with fade-in animation */}
-        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
-          <FlatList
-            data={filteredDrivers}
-            renderItem={renderDriverItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContainer}
-            style={styles.list}
-            showsVerticalScrollIndicator={false}
+    <View style={styles.mainContent}>
+      
+      {/* Action Bar */}
+      <View style={styles.actionBar}>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#6B7280" />
+          <TextInput
+            style={[
+              styles.searchInput,
+              Platform.OS === 'web' ? { outline: 'none' } : {}
+            ]}
+            placeholder="Search drivers..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#6B7280"
           />
-        </Animated.View>
+        </View>
+        
+        <TouchableOpacity style={styles.filterButton}>
+          <Filter size={20} color="#6B7280" />
+          <ThemedText style={styles.filterText}>Filter</ThemedText>
+        </TouchableOpacity>
       </View>
-    </SidebarLayout>
+      
+      {/* Main content with fade-in animation */}
+      <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+        <FlatList
+          data={filteredDrivers}
+          renderItem={renderDriverItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -243,32 +234,18 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     backgroundColor: '#F8FAFC',
   },
-  contentContainer: {
-    flex: 1,
-  },
-  header: {
-    height: 70,
+  topButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  contentContainer: {
+    flex: 1,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontWeight: '600',
-    fontSize: 20,
-    color: '#000000',
-  },
+
   addButton: {
     backgroundColor: '#4361ee',
     flexDirection: 'row',
@@ -307,7 +284,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     height: 40,
-    // We'll handle the outline removal in the component
   },
   filterButton: {
     flexDirection: 'row',
@@ -378,11 +354,13 @@ const styles = StyleSheet.create({
   contactInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 16,
+    marginBottom: 4,
   },
   contactText: {
     fontSize: 14,

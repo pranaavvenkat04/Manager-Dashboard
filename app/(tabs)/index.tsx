@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
 import { router, useNavigation } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/SchoolProvider';
@@ -35,8 +36,6 @@ interface User {
   school_id: string;
   viewable_routes: string[];
 }
-
-type AppRoute = '/' | '/drivers' | '/routes' | '/users' | '/settings';
 
 // Mock Firebase functions with proper typing
 const fetchCollection = <T,>(collection: string): Promise<T[]> => {
@@ -119,8 +118,8 @@ export default function HomeScreen() {
     loadData();
   }, []);
 
-  const navigateToDetailView = (path: AppRoute) => {
-    router.push(path);
+  const navigateToDetailView = (path: string) => {
+    router.push(path as any);
   };
 
   const toggleDrawer = () => {
@@ -250,35 +249,27 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.mainContent}>
-      {/* Header with drawer toggle */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={toggleDrawer} style={styles.menuButton}>
-          <Ionicons name="menu" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <ThemedText type="title" style={styles.headerTitle}>{schoolName} Dashboard</ThemedText>
-      </View>
-      
       {/* Main content */}
       <ScrollView style={styles.scrollView}>
-        {renderStats()}
-        <View style={styles.gridContainer}>
-          <View style={styles.column}>
-            {renderDrivers()}
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {renderStats()}
+          <View style={styles.gridContainer}>
+            <View style={styles.column}>
+              {renderDrivers()}
+            </View>
+            <View style={styles.column}>
+              {renderRoutes()}
+            </View>
+            <View style={styles.column}>
+              {renderUsers()}
+              {renderReports()}
+            </View>
           </View>
-          <View style={styles.column}>
-            {renderRoutes()}
-          </View>
-          <View style={styles.column}>
-            {renderUsers()}
-            {renderReports()}
-          </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </View>
   );
 }
-
-const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   mainContent: {
@@ -302,13 +293,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#000000',
   },
-  contentContainer: {
-    flex: 1,
-  },
-  headerLeft: {
-    flex: 1,
-    alignItems: 'center',
-  },
   scrollView: {
     flex: 1,
     backgroundColor: '#f5f7fa',
@@ -317,6 +301,7 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     marginBottom: 24,
   },
   statBox: {
@@ -324,6 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',
+    marginBottom: 8,
   },
   statNumber: {
     fontSize: 24,
@@ -339,9 +325,11 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginHorizontal: -8,
   },
   column: {
     width: '33.33%',
+    paddingHorizontal: 8,
   },
   sectionContainer: {
     backgroundColor: 'white',
@@ -352,7 +340,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     padding: 24,
     marginBottom: 16,
-    marginRight: 16,
   },
   sectionHeader: {
     flexDirection: 'row',

@@ -1,78 +1,123 @@
+import React from 'react';
 import { Drawer } from 'expo-router/drawer';
 import { Ionicons } from '@expo/vector-icons';
+import { TouchableOpacity } from 'react-native';
 import CustomDrawerContent from '@/components/CustomDrawerContent';
+import { SchoolProvider } from '@/components/SchoolProvider';
+import { useNavigation } from '@react-navigation/native';
 
-export default function RootLayout() {
+// Custom header left button component
+function HeaderLeftButton() {
+  const navigation = useNavigation();
+  
   return (
-    <Drawer
-      screenOptions={{
-        headerShown: false,
-        drawerStyle: {
-          backgroundColor: '#192549',
-          width: 230,
-        },
-        drawerActiveBackgroundColor: '#304878',
-        drawerActiveTintColor: '#FFFFFF',
-        drawerInactiveTintColor: '#94A3B8',
+    <TouchableOpacity
+      style={{ marginLeft: 16 }}
+      onPress={() => {
+        // @ts-ignore - toggleDrawer exists on the drawer navigation
+        navigation.toggleDrawer();
       }}
-      drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
-      {/* Route to the tabs/index.tsx file for Dashboard */}
-      <Drawer.Screen
-        name="(tabs)/index"
-        options={{
-          drawerLabel: 'Dashboard',
-          title: 'Dashboard',
-          drawerIcon: ({ size, color }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
+      <Ionicons 
+        name="menu" 
+        size={24} 
+        color="#1f2937"
       />
-      
-      {/* Routes to other files within the (tabs) folder */}
-      <Drawer.Screen
-        name="(tabs)/drivers"
-        options={{
-          drawerLabel: 'Drivers',
-          title: 'Drivers',
-          drawerIcon: ({ size, color }) => (
-            <Ionicons name="car-outline" size={size} color={color} />
-          ),
+    </TouchableOpacity>
+  );
+}
+
+export default function TabsLayout() {
+  return (
+    <SchoolProvider>
+      <Drawer
+        screenOptions={{
+          headerShown: true,
+          headerStyle: {
+            backgroundColor: 'white',
+            height: 70,
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+          },
+          headerTitleStyle: {
+            fontWeight: '600',
+            fontSize: 20,
+            color: '#000000',
+          },
+          // Use our custom header left component
+          headerLeft: () => <HeaderLeftButton />,
+          drawerStyle: {
+            width: 230,
+          },
+          drawerType: 'front',
+          overlayColor: 'rgba(0,0,0,0.5)',
+          drawerActiveTintColor: '#FFFFFF',
+          drawerInactiveTintColor: '#94A3B8',
+          drawerActiveBackgroundColor: '#304878',
+          swipeEdgeWidth: 80,
         }}
-      />
-      
-      <Drawer.Screen
-        name="(tabs)/routes"
-        options={{
-          drawerLabel: 'Routes',
-          title: 'Routes',
-          drawerIcon: ({ size, color }) => (
-            <Ionicons name="map-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      
-      <Drawer.Screen
-        name="(tabs)/users"
-        options={{
-          drawerLabel: 'Students/Parents',
-          title: 'Students/Parents',
-          drawerIcon: ({ size, color }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      
-      <Drawer.Screen
-        name="(tabs)/settings"
-        options={{
-          drawerLabel: 'Settings',
-          title: 'Settings',
-          drawerIcon: ({ size, color }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-        }}
-      />
-    </Drawer>
+        drawerContent={(props) => <CustomDrawerContent {...props} />}
+      >
+        {/* Dashboard Route */}
+        <Drawer.Screen
+          name="index"
+          options={{
+            title: 'NYIT Dashboard',
+            drawerLabel: 'Dashboard',
+            drawerIcon: ({ size, color }) => (
+              <Ionicons name="home-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        
+        {/* Drivers Route */}
+        <Drawer.Screen
+          name="drivers"
+          options={{
+            title: 'Drivers',
+            drawerLabel: 'Drivers',
+            drawerIcon: ({ size, color }) => (
+              <Ionicons name="car-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        
+        {/* Routes Management */}
+        <Drawer.Screen
+          name="routes"
+          options={{
+            title: 'Routes',
+            drawerLabel: 'Routes',
+            drawerIcon: ({ size, color }) => (
+              <Ionicons name="map-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        
+        {/* Students/Parents */}
+        <Drawer.Screen
+          name="users"
+          options={{
+            title: 'Students/Parents',
+            drawerLabel: 'Students/Parents',
+            drawerIcon: ({ size, color }) => (
+              <Ionicons name="people-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        
+        {/* Settings */}
+        <Drawer.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
+            drawerLabel: 'Settings',
+            drawerIcon: ({ size, color }) => (
+              <Ionicons name="settings-outline" size={size} color={color} />
+            ),
+          }}
+        />
+      </Drawer>
+    </SchoolProvider>
   );
 }

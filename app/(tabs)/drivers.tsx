@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, Animated, TextInput, Alert, Platform } from 'react-native';
 import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Phone, Mail } from 'lucide-react';
-import { useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useSchoolContext } from '@/components/SchoolProvider';
+import { useSchoolContext } from '@/components/PersistentSidebar';
 
 // Define interface for Driver based on Firestore structure
 interface Driver {
@@ -41,7 +39,6 @@ const fetchDrivers = (): Promise<Driver[]> => {
 
 export default function DriversScreen() {
   const { schoolName } = useSchoolContext();
-  const navigation = useNavigation();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<Driver[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,11 +89,6 @@ export default function DriversScreen() {
     }
   }, [searchQuery, drivers]);
 
-  // Toggle drawer
-  const toggleDrawer = () => {
-    navigation.dispatch(DrawerActions.toggleDrawer());
-  };
-
   // Action menu handlers
   const showActionMenu = (driver: Driver, event: any) => {
     setSelectedDriver(driver);
@@ -145,11 +137,11 @@ export default function DriversScreen() {
   };
 
   // Render driver item
-  const renderDriverItem = ({ item }: { item: Driver }) => (
+  const   renderDriverItem = ({ item }: { item: Driver }) => (
     <View style={styles.driverCard}>
       <View style={styles.driverInfo}>
         <View style={styles.driverInitials}>
-          <ThemedText style={styles.initialsText}>{item.name.substring(0, 2).toUpperCase()}</ThemedText>
+          <ThemedText style={styles.initialsText}>DR</ThemedText>
         </View>
         <View style={styles.driverDetails}>
           <ThemedText style={styles.driverName}>{item.name}</ThemedText>
@@ -190,9 +182,14 @@ export default function DriversScreen() {
 
   return (
     <View style={styles.mainContent}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <ThemedText style={styles.pageTitle}>Drivers</ThemedText>
+        <ThemedText style={styles.schoolName}>NYIT</ThemedText>
+      </View>
       
-      {/* Action Bar */}
-      <View style={styles.actionBar}>
+      {/* Search Bar */}
+      <View style={styles.searchBarContainer}>
         <View style={styles.searchContainer}>
           <Search size={20} color="#6B7280" />
           <TextInput
@@ -206,11 +203,6 @@ export default function DriversScreen() {
             placeholderTextColor="#6B7280"
           />
         </View>
-        
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} color="#6B7280" />
-          <ThemedText style={styles.filterText}>Filter</ThemedText>
-        </TouchableOpacity>
       </View>
       
       {/* Main content with fade-in animation */}
@@ -234,49 +226,39 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     backgroundColor: '#F8FAFC',
   },
-  topButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 16,
+  pageHeader: {
+    padding: 24,
+    paddingBottom: 12,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  schoolName: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 4,
   },
   contentContainer: {
     flex: 1,
   },
-
-  addButton: {
-    backgroundColor: '#4361ee',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: 'white',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  actionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchBarContainer: {
     padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   searchContainer: {
-    flex: 1,
     height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingHorizontal: 12,
-    marginRight: 16,
   },
   searchInput: {
     flex: 1,
@@ -285,43 +267,21 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     height: 40,
   },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  filterText: {
-    color: '#6B7280',
-    marginLeft: 6,
-    fontWeight: '500',
-  },
   list: {
     flex: 1,
-    padding: 16,
   },
   listContainer: {
-    paddingBottom: 20,
+    paddingVertical: 8,
   },
   driverCard: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2.22,
-    elevation: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   driverInfo: {
     flexDirection: 'row',
@@ -335,12 +295,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#4361ee',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   initialsText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 14,
   },
   driverDetails: {
     flex: 1,

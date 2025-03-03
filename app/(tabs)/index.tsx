@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
-import { router, useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useSchoolContext } from '@/components/SchoolProvider';
+import { useSchoolContext } from '@/components/PersistentSidebar';
 
 // Define interfaces for type safety based on Firestore structure
 interface Driver {
@@ -80,7 +78,6 @@ const fetchCollection = <T,>(collection: string): Promise<T[]> => {
 
 export default function HomeScreen() {
   const { schoolName } = useSchoolContext();
-  const navigation = useNavigation();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -121,10 +118,6 @@ export default function HomeScreen() {
   const navigateToDetailView = (path: string) => {
     router.push(path as any);
   };
-
-  const toggleDrawer = () => {
-    navigation.dispatch(DrawerActions.toggleDrawer());
-  }
 
   const renderDrivers = () => {
     return (
@@ -246,9 +239,15 @@ export default function HomeScreen() {
       </View>
     );
   };
-
+  
   return (
     <View style={styles.mainContent}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <ThemedText style={styles.pageTitle}>Dashboard</ThemedText>
+        {schoolName && <ThemedText style={styles.schoolName}>{schoolName}</ThemedText>}
+      </View>
+      
       {/* Main content */}
       <ScrollView style={styles.scrollView}>
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -275,27 +274,26 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     flexDirection: 'column',
+    backgroundColor: '#F8FAFC',
   },
-  header: {
-    height: 70,
+  pageHeader: {
+    padding: 24,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
   },
-  menuButton: {
-    marginRight: 16,
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
   },
-  headerTitle: {
-    fontWeight: '500',
-    fontSize: 20,
-    color: '#000000',
+  schoolName: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 4,
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
     padding: 24,
   },
   statsGrid: {

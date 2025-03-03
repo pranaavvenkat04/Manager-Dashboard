@@ -1,25 +1,17 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, TouchableOpacity, Switch, ScrollView, Alert } from 'react-native';
-import { useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
 import { User, Bell, Shield, Moon, HelpCircle, RefreshCw } from 'lucide-react';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useSchoolContext } from '@/components/SchoolProvider';
+import { useSchoolContext } from '@/components/PersistentSidebar';
 
 export default function SettingsScreen() {
   const { schoolName } = useSchoolContext();
-  const navigation = useNavigation();
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [locationTracking, setLocationTracking] = useState(true);
-
-  // Toggle drawer
-  const toggleDrawer = () => {
-    navigation.dispatch(DrawerActions.toggleDrawer());
-  };
 
   // Setting toggle handlers
   const toggleNotifications = () => setNotifications(!notifications);
@@ -85,6 +77,11 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.mainContent}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <ThemedText style={styles.pageTitle}>Settings</ThemedText>
+        {schoolName && <ThemedText style={styles.schoolName}>{schoolName}</ThemedText>}
+      </View>
       
       {/* Settings content */}
       <ScrollView style={styles.scrollView}>
@@ -181,22 +178,21 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     backgroundColor: '#F8FAFC',
   },
-  header: {
-    height: 70,
+  pageHeader: {
+    padding: 24,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
   },
-  menuButton: {
-    marginRight: 16,
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
   },
-  headerTitle: {
-    fontWeight: '500',
-    fontSize: 20,
-    color: '#000000',
+  schoolName: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 4,
   },
   scrollView: {
     flex: 1,

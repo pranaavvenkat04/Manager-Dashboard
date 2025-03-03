@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Drawer } from 'expo-router/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { TouchableOpacity } from 'react-native';
 import CustomDrawerContent from '@/components/CustomDrawerContent';
 import { SchoolProvider } from '@/components/SchoolProvider';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Storage key for sidebar state
+const SIDEBAR_STATE_KEY = 'bustrak_sidebar_open';
 
 // Custom header left button component
 function HeaderLeftButton() {
@@ -28,6 +32,25 @@ function HeaderLeftButton() {
 }
 
 export default function TabsLayout() {
+  const [drawerWidth, setDrawerWidth] = useState(230);
+
+  // Load saved sidebar state on component mount
+  useEffect(() => {
+    const loadSidebarState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem(SIDEBAR_STATE_KEY);
+        if (savedState !== null) {
+          const isOpen = JSON.parse(savedState);
+          setDrawerWidth(isOpen ? 230 : 70);
+        }
+      } catch (error) {
+        console.error('Error loading sidebar state:', error);
+      }
+    };
+    
+    loadSidebarState();
+  }, []);
+
   return (
     <SchoolProvider>
       <Drawer
@@ -47,7 +70,7 @@ export default function TabsLayout() {
           // Use our custom header left component
           headerLeft: () => <HeaderLeftButton />,
           drawerStyle: {
-            width: 230,
+            width: drawerWidth,
           },
           drawerType: 'front',
           overlayColor: 'rgba(0,0,0,0.5)',
@@ -56,7 +79,12 @@ export default function TabsLayout() {
           drawerActiveBackgroundColor: '#304878',
           swipeEdgeWidth: 80,
         }}
-        drawerContent={(props) => <CustomDrawerContent {...props} />}
+        drawerContent={(props) => (
+          <CustomDrawerContent 
+            {...props} 
+            setDrawerWidth={setDrawerWidth}
+          />
+        )}
       >
         {/* Dashboard Route */}
         <Drawer.Screen

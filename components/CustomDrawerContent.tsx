@@ -8,10 +8,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedText } from '@/components/ThemedText';
 
+// Define extended props interface
+interface CustomDrawerContentProps extends DrawerContentComponentProps {
+  setDrawerWidth?: (width: number) => void;
+}
+
 // Storage key for sidebar state
 const SIDEBAR_STATE_KEY = 'bustrak_sidebar_open';
 
-export default function CustomDrawerContent(props: DrawerContentComponentProps) {
+export default function CustomDrawerContent(props: CustomDrawerContentProps) {
   const { bottom } = useSafeAreaInsets();
   const pathname = usePathname();
   const [userName, setUserName] = useState('Jane Doe');
@@ -61,6 +66,14 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
     
     fetchData();
   }, []);
+
+  // Apply sidebar width to the drawer
+  useEffect(() => {
+    // Update the drawer width if setDrawerWidth prop is provided
+    if (props.setDrawerWidth) {
+      props.setDrawerWidth(sidebarOpen ? 230 : 70);
+    }
+  }, [sidebarOpen, props.setDrawerWidth]);
 
   // Save sidebar state when it changes
   const saveSidebarState = async (isOpen: boolean) => {
@@ -160,15 +173,89 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
     alert('Logging out...');
   };
 
+  // Custom drawer items with proper highlight and collapsing behavior
+  const renderCustomDrawerItems = () => {
+    return props.state.routes.map((route, index) => {
+      const { options } = props.descriptors[route.key];
+      const labelText = typeof options.drawerLabel === 'string' 
+        ? options.drawerLabel 
+        : typeof options.title === 'string' 
+          ? options.title 
+          : route.name;
+      
+      const isFocused = props.state.index === index;
+      
+      const onPress = () => {
+        const event = props.navigation.emit({
+          type: 'drawerItemPress',
+          target: route.key,
+          canPreventDefault: true,
+        });
+
+        if (!isFocused && !event.defaultPrevented) {
+          props.navigation.navigate(route.name);
+        }
+      };
+      
+      return (
+        <TouchableOpacity
+          key={route.key}
+          style={[
+            styles.drawerItem,
+            isFocused && styles.drawerItemActive,
+            !sidebarOpen && styles.drawerItemCollapsed
+          ]}
+          onPress={onPress}
+        >
+          <Animated.View style={[
+            styles.iconContainer,
+            !sidebarOpen && styles.iconContainerCentered
+          ]}>
+            {options.drawerIcon && 
+              options.drawerIcon({ 
+                focused: isFocused, 
+                color: isFocused ? '#FFFFFF' : '#94A3B8', 
+                size: 22 
+              })
+            }
+          </Animated.View>
+          
+          <Animated.View style={{ 
+            opacity: textOpacity, 
+            flex: 1,
+            marginLeft: 12,
+            height: sidebarOpen ? 'auto' : 0,
+            overflow: 'hidden'
+          }}>
+            <ThemedText style={[
+              styles.drawerLabel,
+              isFocused && styles.drawerLabelActive
+            ]}>
+              {labelText}
+            </ThemedText>
+          </Animated.View>
+        </TouchableOpacity>
+      );
+    });
+  };
+
   return (
-    <View style={styles.container}>
+    <Animated.View style={[
+      styles.container,
+      { width: sidebarWidth }
+    ]}>
       {/* Logo/Brand Header with Toggle */}
       <TouchableOpacity 
         activeOpacity={0.8} 
         style={styles.header} 
         onPress={toggleSidebar}
       >
-        <Animated.View style={{ opacity: textOpacity }}>
+        <Animated.View style={{ 
+          opacity: textOpacity,
+          position: 'absolute',
+          width: '100%',
+          alignItems: 'center'
+        }}>
           <ThemedText style={styles.logoText}>BusTrak</ThemedText>
         </Animated.View>
         
@@ -178,83 +265,29 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
             outputRange: [1, 0, 0]
           }),
           position: 'absolute',
-          left: 25
+          alignSelf: 'center'
         }}>
           <ThemedText style={styles.logoTextSmall}>BT</ThemedText>
         </Animated.View>
       </TouchableOpacity>
 
-      {/* Main Drawer Items with animation support */}
+      {/* Custom Drawer Items with animation support */}
       <DrawerContentScrollView 
         {...props} 
         contentContainerStyle={styles.scrollContent}
       >
-        {/* DrawerItemList with conditional rendering for text */}
-        <View>
-          {/* We'll manually render items similar to DrawerItemList but with animations */}
-          {props.state.routes.map((route, index) => {
-            const { options } = props.descriptors[route.key];
-            const labelText = typeof options.drawerLabel === 'string' 
-              ? options.drawerLabel 
-              : typeof options.title === 'string' 
-                ? options.title 
-                : route.name;
-            const isFocused = props.state.index === index;
-            
-            const onPress = () => {
-              const event = props.navigation.emit({
-                type: 'drawerItemPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-
-              if (!isFocused && !event.defaultPrevented) {
-                props.navigation.navigate(route.name);
-              }
-            };
-            
-            // Custom drawer item with animation support
-            return (
-              <TouchableOpacity
-                key={route.key}
-                style={[
-                  styles.drawerItem,
-                  isFocused && styles.drawerItemActive,
-                ]}
-                onPress={onPress}
-              >
-                {options.drawerIcon && 
-                  options.drawerIcon({ 
-                    focused: isFocused, 
-                    color: isFocused ? '#FFFFFF' : '#94A3B8', 
-                    size: 22 
-                  })
-                }
-                
-                <Animated.View style={{ 
-                  opacity: textOpacity, 
-                  marginLeft: 12,
-                  flex: 1
-                }}>
-                  {sidebarOpen && (
-                    <ThemedText style={[
-                      styles.drawerLabel,
-                      isFocused && styles.drawerLabelActive
-                    ]}>
-                      {labelText}
-                    </ThemedText>
-                  )}
-                </Animated.View>
-              </TouchableOpacity>
-            );
-          })}
+        <View style={styles.drawerItemsContainer}>
+          {renderCustomDrawerItems()}
         </View>
       </DrawerContentScrollView>
 
       {/* Profile and Logout Section */}
       <View style={[styles.profileContainer, { marginBottom: bottom || 20 }]}>
         <TouchableOpacity 
-          style={styles.profileSection} 
+          style={[
+            styles.profileSection,
+            !sidebarOpen && styles.profileSectionCollapsed
+          ]} 
           onPress={() => {
             if (showLogout) {
               hideLogout();
@@ -263,13 +296,18 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
             }
           }}
         >
-          <View style={styles.profileIcon}>
+          <View style={[
+            styles.profileIcon,
+            !sidebarOpen && styles.profileIconCentered
+          ]}>
             <Ionicons name="person" size={20} color="#FFFFFF" />
           </View>
           <Animated.View style={{ 
             opacity: textOpacity, 
             marginLeft: 12,
-            flex: 1
+            flex: 1,
+            height: sidebarOpen ? 'auto' : 0,
+            overflow: 'hidden'
           }}>
             {sidebarOpen && (
               <ThemedText style={styles.profileName}>{userName}</ThemedText>
@@ -299,7 +337,7 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
           </Animated.View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -311,6 +349,7 @@ const styles = StyleSheet.create({
   header: {
     height: 70,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -328,6 +367,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 8,
+  },
+  drawerItemsContainer: {
     paddingHorizontal: 8,
   },
   drawerItem: {
@@ -337,9 +378,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     marginBottom: 4,
+    position: 'relative',
+  },
+  drawerItemCollapsed: {
+    justifyContent: 'center',
+    paddingHorizontal: 0,
   },
   drawerItemActive: {
     backgroundColor: '#304878',
+  },
+  iconContainer: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconContainerCentered: {
+    position: 'absolute',
+    left: 'auto',
+    alignSelf: 'center',
   },
   drawerLabel: {
     fontSize: 14,
@@ -363,6 +419,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 8,
   },
+  profileSectionCollapsed: {
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
   profileIcon: {
     width: 36,
     height: 36,
@@ -370,6 +430,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#304878',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  profileIconCentered: {
+    alignSelf: 'center',
   },
   profileName: {
     fontSize: 14,

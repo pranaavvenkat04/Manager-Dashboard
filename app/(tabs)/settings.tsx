@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
-import { useAuth, useClerk } from '@clerk/clerk-expo';
+import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 
 import { Platform } from 'react-native';
@@ -17,19 +17,18 @@ export default function SettingsScreen() {
   const [darkMode, setDarkMode] = useState(false);
   const [locationTracking, setLocationTracking] = useState(true);
   const { signOut, isSignedIn } = useAuth();
-  const clerk = useClerk();
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+
 
   // Setting toggle handlers
   const toggleNotifications = () => setNotifications(!notifications);
   const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleLocationTracking = () => setLocationTracking(!locationTracking);
-  
   useEffect(() => {
     console.log("[Settings] Auth state:", { signOut: !!signOut, isSignedIn });
   }, [signOut, isSignedIn]);
 
-  // Reset app handler
+  // Reset and logout handlers
   const handleResetApp = () => {
     console.log("[Settings] Reset App button clicked");
     
@@ -65,107 +64,30 @@ export default function SettingsScreen() {
     }
   };
 
-  // Safer logout logic for web browsers
-  const safeWebLogout = () => {
-    try {
-      console.log("[Settings] Starting safe web logout");
-      
-      // Set the logging out flag to prevent multiple clicks
-      setIsLoggingOut(true);
-      
-      // For web browsers, the most reliable approach is to navigate to
-      // login page via direct URL change
-      if (typeof window !== 'undefined') {
-        // Store logout intent in session storage
-        window.sessionStorage.setItem('loggingOut', 'true');
-        
-        // Wait a moment and then change location directly
-        // This is more reliable than router.replace for auth state changes
-        setTimeout(() => {
-          window.location.href = '/login';
-          
-          // Perform the signOut in the next cycle after navigation starts
-          setTimeout(() => {
-            try {
-              if (clerk) {
-                clerk.signOut();
-              }
-            } catch (err) {
-              console.error("[Settings] Error in delayed signOut:", err);
-            }
-          }, 100);
-        }, 10);
-      }
-    } catch (error) {
-      console.error("[Settings] Error in safeWebLogout:", error);
-      setIsLoggingOut(false);
-      
-      // Show error message
-      if (Platform.OS === 'web') {
-        alert("Logout failed. Please try again.");
-      }
-    }
-  };
-
-  // Mobile-specific logout function
-  const safeMobileLogout = async () => {
-    try {
-      console.log("[Settings] Starting safe mobile logout");
-      
-      // Set the logging out flag
-      setIsLoggingOut(true);
-      
-      // For mobile, we can use a more straightforward approach
-      // First navigate to login
-      router.replace('/login');
-      
-      // Then sign out after a short delay
-      setTimeout(async () => {
-        try {
-          if (signOut) {
-            await signOut();
-          }
-          console.log("[Settings] Mobile signOut completed");
-        } catch (signOutErr) {
-          console.error("[Settings] Error in delayed mobile signOut:", signOutErr);
-        }
-      }, 300);
-    } catch (error) {
-      console.error("[Settings] Error in safeMobileLogout:", error);
-      setIsLoggingOut(false);
-      
-      // Show error message
-      Alert.alert("Error", "Logout failed. Please try again.");
-    }
-  };
-
-  // Main logout handler with confirmation
   const handleLogout = async () => {
-    // Prevent multiple clicks
-    if (isLoggingOut) {
-      console.log("[Settings] Logout already in progress, ignoring click");
-      return;
-    }
-    
     console.log("[Settings] Logout button clicked");
     
-    // Create confirmation function
-    const confirmLogout = () => {
-      if (Platform.OS === 'web') {
-        safeWebLogout();
-      } else {
-        safeMobileLogout();
-      }
-    };
-  
-    // Show confirmation dialog
+    // Check if we're on web platform
     if (Platform.OS === 'web') {
+      // Web browser confirmation
       if (window.confirm("Are you sure you want to logout?")) {
-        confirmLogout();
+        try {
+          console.log("[Settings] About to call signOut()");
+          await signOut();
+          console.log("[Settings] signOut completed successfully");
+          
+          setTimeout(() => {
+            console.log("[Settings] Attempting navigation to login");
+            router.replace('/login');
+          }, 300);
+        } catch (error) {
+          console.error("[Settings] Error during logout:", error);
+        }
       } else {
         console.log("[Settings] Logout cancelled");
       }
     } else {
+      // Mobile Alert
       Alert.alert(
         "Confirm Logout",
         "Are you sure you want to logout?",
@@ -177,7 +99,20 @@ export default function SettingsScreen() {
           },
           {
             text: "Logout",
-            onPress: confirmLogout
+            onPress: async () => {
+              try {
+                console.log("[Settings] About to call signOut()");
+                await signOut();
+                console.log("[Settings] signOut completed successfully");
+                
+                setTimeout(() => {
+                  console.log("[Settings] Attempting navigation to login");
+                  router.replace('/login');
+                }, 300);
+              } catch (error) {
+                console.error("[Settings] Error during logout:", error);
+              }
+            }
           }
         ]
       );
@@ -279,25 +214,18 @@ export default function SettingsScreen() {
           <TouchableOpacity 
             style={styles.dangerButton}
             onPress={handleResetApp}
-            disabled={isLoggingOut}
           >
             <RefreshCw size={18} color="#FFFFFF" />
             <ThemedText style={styles.dangerButtonText}>Reset App</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[
-              styles.logoutButton,
-              isLoggingOut && styles.logoutButtonDisabled
-            ]}
-            onPress={handleLogout}
-            disabled={isLoggingOut}
-            activeOpacity={0.7}
+            style={styles.logoutButton}
+            onPress={handleLogout} // Make sure this is correctly pointing to the function
+            activeOpacity={0.7} // Add this to improve touch feedback
           >
             <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
-            <ThemedText style={styles.logoutButtonText}>
-              {isLoggingOut ? 'Logging out...' : 'Logout'}
-            </ThemedText>
+            <ThemedText style={styles.logoutButtonText}>Logout</ThemedText>
           </TouchableOpacity>
         </View>
         
@@ -404,9 +332,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 8,
-  },
-  logoutButtonDisabled: {
-    backgroundColor: '#93c5fd',
   },
   logoutButtonText: {
     color: 'white',

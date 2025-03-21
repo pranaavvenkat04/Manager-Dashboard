@@ -4,6 +4,7 @@ import { usePathname, router } from 'expo-router';
 import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable } from 'react-native';
 
 import { ThemedText } from './ThemedText';
 
@@ -59,10 +60,19 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userName, setUserName] = useState('Jane Doe');
   const [schoolName, setSchoolName] = useState('NYIT');
+  const [showLogout, setShowLogout] = useState(false);
+  const [hoverStates, setHoverStates] = useState<{[key: string]: boolean}>({});
+  const [profileHover, setProfileHover] = useState(false);
   
   // Use refs for animations to maintain consistent behavior
   const sidebarWidth = useRef(new Animated.Value(230)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
+  const logoutOpacity = useRef(new Animated.Value(0)).current;
+  const logoutScale = useRef(new Animated.Value(0.85)).current;
+  
+  // Calculate position for logout button based on sidebar state
+  const logoutPositionX = useRef(new Animated.Value(sidebarOpen ? 210 : 70)).current;
+  const logoutPositionY = useRef(new Animated.Value(10)).current;
 
   // Load saved sidebar state on component mount
   useEffect(() => {
@@ -74,6 +84,7 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           setSidebarOpen(isOpen);
           sidebarWidth.setValue(isOpen ? 230 : 70);
           textOpacity.setValue(isOpen ? 1 : 0);
+          logoutPositionX.setValue(isOpen ? 210 : 70);
         }
       } catch (error) {
         console.error('Error loading sidebar state:', error);
@@ -97,6 +108,15 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     
     fetchData();
   }, []);
+
+  // Update logout visibility based on profile hover
+  useEffect(() => {
+    if (profileHover) {
+      showLogoutButton();
+    } else {
+      hideLogout();
+    }
+  }, [profileHover]);
 
   // Save sidebar state when it changes
   const saveSidebarState = async (isOpen: boolean) => {
@@ -130,6 +150,13 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           useNativeDriver: true,
         }).start();
       }, 100);
+      
+      // Update logout button position
+      Animated.timing(logoutPositionX, {
+        toValue: 210,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     } else {
       // Closing the sidebar - first fade out text, then shrink width
       Animated.timing(textOpacity, {
@@ -143,9 +170,59 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           useNativeDriver: false,
         }).start();
       });
+      
+      // Update logout button position
+      Animated.timing(logoutPositionX, {
+        toValue: 70,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     }
     
     setSidebarOpen(newState);
+  };
+
+  // Show logout button with animation
+  const showLogoutButton = () => {
+    setShowLogout(true);
+    Animated.parallel([
+      Animated.timing(logoutOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoutScale, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      })
+    ]).start();
+  };
+
+  // Hide logout button with animation
+  const hideLogout = () => {
+    Animated.parallel([
+      Animated.timing(logoutOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoutScale, {
+        toValue: 0.85,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      setShowLogout(false);
+    });
+  };
+
+  // Handle hover for items
+  const handleHoverChange = (itemKey: string, isHovering: boolean) => {
+    setHoverStates(prev => ({
+      ...prev,
+      [itemKey]: isHovering
+    }));
   };
 
   // Function to navigate to a route
@@ -170,23 +247,28 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const renderNavItem = (route: RouteItem, index: number, isBottomNav: boolean = false) => {
     const realIndex = isBottomNav ? index + ROUTES.length : index;
     const isActive = realIndex === activeIndex;
+    const itemKey = `nav-${route.path}`;
+    const isHovering = hoverStates[itemKey] || false;
     
     return (
-      <TouchableOpacity
+      <Pressable
         key={route.path}
         style={[
           styles.navItem,
           sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
           isActive && styles.navItemActive,
+          isHovering && !isActive && styles.navItemHover,
         ]}
         onPress={(e) => {
           e.stopPropagation(); // Prevent sidebar toggle
           navigateTo(route.path);
         }}
+        onHoverIn={() => handleHoverChange(itemKey, true)}
+        onHoverOut={() => handleHoverChange(itemKey, false)}
       >
         <route.icon 
           size={22} 
-          color={isActive ? '#FFFFFF' : '#94A3B8'} 
+          color={isActive ? '#FFFFFF' : isHovering ? '#FFFFFF' : '#94A3B8'} 
         />
         
         <Animated.View 
@@ -200,13 +282,14 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           <ThemedText 
             style={[
               styles.navLabel, 
-              isActive && styles.activeNavLabel
+              isActive && styles.activeNavLabel,
+              isHovering && !isActive && styles.hoverNavLabel
             ]}
           >
             {route.label}
           </ThemedText>
         </Animated.View>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -254,40 +337,69 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
             </View>
           </View>
           
-          {/* Profile section with differently positioned logout buttons */}
+          {/* Profile section with animated logout button */}
           <View style={[
             styles.profileContainer,
             { paddingBottom: Platform.OS === 'web' ? 20 : (bottom || 20) }
           ]}>
-            {sidebarOpen ? (
-              /* Expanded: Profile with logout button inline */
-              <View style={styles.profileExpanded}>
-                <View style={styles.profileIcon}>
-                  <User size={20} color="#FFFFFF" />
-                </View>
-                <View style={styles.profileInfo}>
-                  <ThemedText style={styles.profileName}>{userName}</ThemedText>
-                </View>
-                <TouchableOpacity 
-                  style={styles.logoutButtonInline}
+            {/* Main profile section */}
+            <Pressable 
+              onHoverIn={() => setProfileHover(true)}
+              onHoverOut={() => setProfileHover(false)}
+              style={[
+                sidebarOpen ? styles.profileExpanded : styles.profileCollapsed,
+                profileHover && styles.profileHover
+              ]}
+            >
+              <View style={[
+                styles.profileIcon,
+                profileHover && styles.profileIconHover
+              ]}>
+                <User size={20} color="#FFFFFF" />
+              </View>
+              
+              {sidebarOpen && (
+                <Animated.View 
+                  style={{ 
+                    opacity: textOpacity,
+                    marginLeft: 14,
+                    flex: 1
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.profileName,
+                    profileHover && styles.profileNameHover
+                  ]}>
+                    {userName}
+                  </ThemedText>
+                </Animated.View>
+              )}
+            </Pressable>
+            
+            {/* Animated logout button */}
+            {showLogout && (
+              <Animated.View
+                style={[
+                  styles.logoutButtonContainer,
+                  {
+                    opacity: logoutOpacity,
+                    transform: [
+                      { scale: logoutScale },
+                      { translateX: logoutPositionX },
+                      { translateY: logoutPositionY }
+                    ],
+                    position: 'absolute',
+                    zIndex: 100,
+                  }
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.logoutButton}
                   onPress={handleLogout}
                 >
-                  <LogOut size={20} color="#FFFFFF" />
+                  <LogOut size={18} color="#FFFFFF" />
                 </TouchableOpacity>
-              </View>
-            ) : (
-              /* Collapsed: Profile with logout button below */
-              <View style={styles.profileCollapsed}>
-                <View style={styles.profileIconBox}>
-                  <User size={20} color="#FFFFFF" />
-                </View>
-                <TouchableOpacity 
-                  style={styles.logoutButtonBelow}
-                  onPress={handleLogout}
-                >
-                  <LogOut size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
           </View>
         </Animated.View>
@@ -354,6 +466,7 @@ const styles = StyleSheet.create({
     height: 46,
     marginBottom: 8,
     borderRadius: 8,
+    cursor: 'pointer', // Add cursor pointer for web
   },
   navItemExpanded: {
     paddingHorizontal: 16,
@@ -365,6 +478,9 @@ const styles = StyleSheet.create({
   navItemActive: {
     backgroundColor: '#304878', // Active item background color
   },
+  navItemHover: {
+    backgroundColor: 'rgba(48, 72, 120, 0.5)', // Hover background
+  },
   navLabel: {
     fontSize: 15,
     color: '#94A3B8', // Light gray
@@ -372,6 +488,9 @@ const styles = StyleSheet.create({
   activeNavLabel: {
     color: '#FFFFFF', // White when active
     fontWeight: '500',
+  },
+  hoverNavLabel: {
+    color: '#FFFFFF', // White when hovering
   },
   content: {
     flex: 1,
@@ -382,6 +501,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
     paddingTop: 16,
+    position: 'relative',
   },
   // Expanded profile styles
   profileExpanded: {
@@ -390,55 +510,54 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: 8,
-  },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 14,
+    cursor: 'pointer', // Add cursor pointer for web
   },
   // Collapsed profile styles
   profileCollapsed: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 10,
+    cursor: 'pointer', // Add cursor pointer for web
   },
-  profileIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#304878',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  profileHover: {
+    backgroundColor: 'rgba(48, 72, 120, 0.5)', // Hover background
   },
   profileIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#304878',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  profileIconHover: {
+    backgroundColor: '#415b94', // Lighter color on hover
   },
   profileName: {
     fontSize: 14,
     color: 'white',
     fontWeight: '500',
   },
-  // Inline logout button (when expanded)
-  logoutButtonInline: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#304878',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
+  profileNameHover: {
+    color: '#FFFFFF', // Brighter white on hover
   },
-  // Below logout button (when collapsed)
-  logoutButtonBelow: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  // Logout button container
+  logoutButtonContainer: {
+    // Position and transform properties are applied in-line
+  },
+  // Logout button
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#304878',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+    cursor: 'pointer', // Add cursor pointer for web
   }
 });

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated, Platform } from 'react-native';
 import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Mail, Phone, MapPin } from 'lucide-react';
-import { useNavigation } from 'expo-router';
+import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useSchoolContext } from '@/components/SchoolProvider';
+import { useSchoolContext } from '@/components/PersistentSidebar';
 
 // Define interface for User based on Firestore structure
 interface User {
@@ -251,12 +251,21 @@ export default function UsersScreen() {
 
   return (
     <View style={styles.mainContent}>
-      {/* Action Bar */}
-      <View style={styles.actionBar}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <ThemedText style={styles.pageTitle}>Students/Parents</ThemedText>
+        <ThemedText style={styles.schoolName}>{schoolName}</ThemedText>
+      </View>
+      
+      {/* Search Bar */}
+      <View style={styles.searchBarContainer}>
         <View style={styles.searchContainer}>
           <Search size={20} color="#6B7280" />
           <TextInput
-            style={styles.searchInput}
+            style={[
+              styles.searchInput,
+              Platform.OS === 'web' ? { outline: 'none' } : {}
+            ]}
             placeholder="Search users..."
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -304,12 +313,14 @@ export default function UsersScreen() {
             ]}>Students</ThemedText>
           </TouchableOpacity>
         </View>
-        
+      </View>
+      
+      <View style={styles.actionButtonContainer}>
         <TouchableOpacity 
           style={styles.addButton}
           onPress={handleAddNewUser}
         >
-          <Plus size={20} color="white" />
+          <Plus size={18} color="white" />
           <ThemedText style={styles.addButtonText}>Add User</ThemedText>
         </TouchableOpacity>
       </View>
@@ -338,14 +349,30 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
   },
-  actionBar: {
+  pageHeader: {
+    padding: 24,
+    paddingBottom: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  schoolName: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    flexWrap: 'wrap',
+    borderBottomColor: '#F3F4F6',
   },
   searchContainer: {
     flex: 1,
@@ -355,8 +382,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingHorizontal: 12,
-    marginRight: 16,
-    minWidth: 150,
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
@@ -364,12 +390,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     height: 40,
-    outline: 'none',
   },
   filterGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
     height: 36,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
@@ -390,6 +414,12 @@ const styles = StyleSheet.create({
   filterTabTextActive: {
     color: 'white',
   },
+  actionButtonContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
   addButton: {
     backgroundColor: '#4361ee',
     flexDirection: 'row',
@@ -398,35 +428,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   addButtonText: {
     color: 'white',
-    fontWeight: '500',
+    fontWeight: '600',
+    fontSize: 14,
     marginLeft: 8,
   },
   list: {
     flex: 1,
-    padding: 16,
   },
   listContainer: {
-    paddingBottom: 20,
+    paddingVertical: 8,
   },
   userCard: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2.22,
-    elevation: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   userInfo: {
     flexDirection: 'row',

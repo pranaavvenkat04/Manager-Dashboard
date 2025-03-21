@@ -18,7 +18,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         style={[
           styles.container,
           // Apply safe area insets for iOS and mobile
-          Platform.OS === 'web' ? {} : { paddingTop: insets.top }
+          Platform.OS !== 'web' ? { paddingTop: insets.top } : {}
         ]}
       >
         <PersistentSidebar>

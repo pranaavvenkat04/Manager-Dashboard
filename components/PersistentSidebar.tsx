@@ -3,10 +3,9 @@ import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback,
 import { usePathname, router } from 'expo-router';
 import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from './ThemedText';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Define props with schoolName to pass to children components
 interface SchoolContextProps {
@@ -55,21 +54,15 @@ const BOTTOM_ROUTES: RouteItem[] = [
 const SIDEBAR_STATE_KEY = 'bustrak_sidebar_open';
 
 export default function PersistentSidebar({ children }: PersistentSidebarProps) {
-  const colorScheme = useColorScheme();
+  const { top, bottom } = useSafeAreaInsets();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userName, setUserName] = useState('Jane Doe');
-  const [schoolName, setSchoolName] = useState('School');
-  const [showLogout, setShowLogout] = useState(false);
-  const [animating, setAnimating] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
+  const [schoolName, setSchoolName] = useState('NYIT');
   
   // Use refs for animations to maintain consistent behavior
   const sidebarWidth = useRef(new Animated.Value(230)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
-  const logoutOpacity = useRef(new Animated.Value(0)).current;
-  const logoutScale = useRef(new Animated.Value(0.85)).current;
-  const highlightPosition = useRef(new Animated.Value(0)).current;
 
   // Load saved sidebar state on component mount
   useEffect(() => {
@@ -82,38 +75,14 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           sidebarWidth.setValue(isOpen ? 230 : 70);
           textOpacity.setValue(isOpen ? 1 : 0);
         }
-        setInitialLoad(false);
       } catch (error) {
         console.error('Error loading sidebar state:', error);
-        setInitialLoad(false);
       }
     };
     
     loadSidebarState();
-  }, []);
-
-  // Find the active index from the pathname
-  const getActiveIndex = () => {
-    const allRoutes = [...ROUTES, ...BOTTOM_ROUTES];
-    return allRoutes.findIndex(route => 
-      pathname === route.path || pathname.startsWith(`${route.path}/`));
-  };
-  
-  const activeIndex = getActiveIndex();
-
-  // Animate highlight position when pathname changes
-  useEffect(() => {
-    if (activeIndex !== -1 && !initialLoad) {
-      Animated.timing(highlightPosition, {
-        toValue: activeIndex,
-        duration: 300,
-        useNativeDriver: false,
-      }).start();
-    }
-  }, [pathname, initialLoad]);
-
-  // Fetch user profile and school data
-  useEffect(() => {
+    
+    // Fetch user profile and school data
     const fetchData = async () => {
       try {
         // Mock API calls - in real app, these would be Firebase queries
@@ -140,9 +109,6 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
 
   // Toggle sidebar open/closed with animations
   const toggleSidebar = () => {
-    if (animating) return; // Prevent multiple triggers during animation
-    
-    setAnimating(true);
     const newState = !sidebarOpen;
     
     // Save state to AsyncStorage
@@ -162,9 +128,7 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
-        }).start(() => {
-          setAnimating(false);
-        });
+        }).start();
       }, 100);
     } else {
       // Closing the sidebar - first fade out text, then shrink width
@@ -177,18 +141,11 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           toValue: 70,
           duration: 200,
           useNativeDriver: false,
-        }).start(() => {
-          setAnimating(false);
-        });
+        }).start();
       });
     }
     
     setSidebarOpen(newState);
-    
-    // Hide logout if showing
-    if (showLogout) {
-      hideLogout();
-    }
   };
 
   // Function to navigate to a route
@@ -196,93 +153,18 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     router.push(path as any);
   };
 
-  // Show logout button with animation
-  const showLogoutButton = () => {
-    setShowLogout(true);
-    Animated.parallel([
-      Animated.timing(logoutOpacity, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoutScale, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      })
-    ]).start();
-  };
-
-  // Hide logout button with animation
-  const hideLogout = () => {
-    Animated.parallel([
-      Animated.timing(logoutOpacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoutScale, {
-        toValue: 0.85,
-        duration: 200,
-        useNativeDriver: true,
-      })
-    ]).start(() => {
-      setShowLogout(false);
-    });
-  };
-  
-  // We'll use a simpler approach for the hover-based logout
-  // Instead of triggering on hover, we'll just toggle on press
-  
-  // Handle logout button display
-  const toggleLogoutButton = () => {
-    if (showLogout) {
-      hideLogout();
-    } else {
-      showLogoutButton();
-    }
-  };
-  
-  useEffect(() => {
-    // Make sure the logout button works correctly
-    return () => {
-      // Clean up any pending animations
-      if (logoutOpacity && logoutScale) {
-        logoutOpacity.stopAnimation();
-        logoutScale.stopAnimation();
-      }
-    };
-  }, []);
-
   // Handle logout
-  const handleLogout = () => {
-    hideLogout();
-    // In real app - implement logout logic:
+  const handleLogout = (e: any) => {
+    e.stopPropagation(); // Prevent sidebar toggle
+    alert('Logging out...');
+    // Implement actual logout logic here
     // await firebase.auth().signOut();
     // router.replace('/login');
-    alert('Logging out...');
   };
 
-  // Calculate the position for the animated highlight
-  // We're not using this anymore as we're applying active styles directly to nav items
-  const getHighlightPosition = () => {
-    const basePosition = 70;  // Starting Y position
-    const itemHeight = 48;    // Height of each nav item
-    const spacing = 4;        // Space between items
-    const bottomOffset = 30;  // Extra space between top and bottom groups
-    
-    return highlightPosition.interpolate({
-      inputRange: Array.from({ length: ROUTES.length + BOTTOM_ROUTES.length }, (_, i) => i),
-      outputRange: Array.from({ length: ROUTES.length + BOTTOM_ROUTES.length }, (_, i) => {
-        if (i < ROUTES.length) {
-          return basePosition + (i * (itemHeight + spacing));
-        } else {
-          return basePosition + (ROUTES.length * (itemHeight + spacing)) + 
-                 bottomOffset + ((i - ROUTES.length) * (itemHeight + spacing));
-        }
-      }),
-    });
-  };
+  // Find the active route based on pathname
+  const activeIndex = [...ROUTES, ...BOTTOM_ROUTES].findIndex(route => 
+    pathname === route.path || pathname.startsWith(`${route.path}/`));
 
   // Render a navigation item
   const renderNavItem = (route: RouteItem, index: number, isBottomNav: boolean = false) => {
@@ -302,28 +184,27 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           navigateTo(route.path);
         }}
       >
-        <View style={styles.iconContainer}>
-          <route.icon 
-            size={22} 
-            color={isActive ? '#FFFFFF' : '#94A3B8'} 
-          />
-        </View>
+        <route.icon 
+          size={22} 
+          color={isActive ? '#FFFFFF' : '#94A3B8'} 
+        />
+        
         <Animated.View 
           style={{ 
             opacity: textOpacity, 
-            flex: 1 
+            marginLeft: 14,
+            flex: 1,
+            display: sidebarOpen ? 'flex' : 'none'
           }}
         >
-          {sidebarOpen && (
-            <ThemedText 
-              style={[
-                styles.navLabel, 
-                isActive && styles.activeNavLabel
-              ]}
-            >
-              {route.label}
-            </ThemedText>
-          )}
+          <ThemedText 
+            style={[
+              styles.navLabel, 
+              isActive && styles.activeNavLabel
+            ]}
+          >
+            {route.label}
+          </ThemedText>
         </Animated.View>
       </TouchableOpacity>
     );
@@ -332,15 +213,20 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   return (
     <View style={styles.container}>
       {/* Sidebar */}
-      <TouchableOpacity 
-        activeOpacity={1}
-        style={styles.sidebarTouchable}
-        onPress={toggleSidebar}
-      >
-        <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
-          {/* Logo section */}
-          <View style={styles.sidebarHeader}>
-            <Animated.View style={{ opacity: textOpacity }}>
+      <TouchableWithoutFeedback onPress={toggleSidebar}>
+        <Animated.View style={[
+          styles.sidebar, 
+          { 
+            width: sidebarWidth,
+            paddingTop: Platform.OS === 'web' ? 20 : (top || 20) 
+          }
+        ]}>
+          {/* Logo/Brand Header */}
+          <View style={styles.header}>
+            <Animated.View style={{ 
+              opacity: textOpacity,
+              display: sidebarOpen ? 'flex' : 'none'
+            }}>
               <ThemedText style={styles.logoText}>BusTrak</ThemedText>
             </Animated.View>
             
@@ -349,8 +235,7 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
                 inputRange: [70, 150, 230],
                 outputRange: [1, 0, 0]
               }),
-              position: 'absolute',
-              left: 25
+              display: sidebarOpen ? 'none' : 'flex'
             }}>
               <ThemedText style={styles.logoTextSmall}>BT</ThemedText>
             </Animated.View>
@@ -369,71 +254,52 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
             </View>
           </View>
           
-          {/* Profile section */}
-          <View style={styles.profileContainer}>
-            <TouchableOpacity 
-              style={[
-                styles.profileSection,
-                !sidebarOpen && styles.profileSectionCollapsed
-              ]} 
-              onPress={(e) => {
-                e.stopPropagation(); // Prevent sidebar toggle
-                toggleLogoutButton();
-              }}
-            >
-              <View style={styles.profileIconContainer}>
+          {/* Profile section with differently positioned logout buttons */}
+          <View style={[
+            styles.profileContainer,
+            { paddingBottom: Platform.OS === 'web' ? 20 : (bottom || 20) }
+          ]}>
+            {sidebarOpen ? (
+              /* Expanded: Profile with logout button inline */
+              <View style={styles.profileExpanded}>
                 <View style={styles.profileIcon}>
                   <User size={20} color="#FFFFFF" />
                 </View>
-              </View>
-              <Animated.View style={{ 
-                opacity: textOpacity,
-                flex: 1
-              }}>
-                {sidebarOpen && (
+                <View style={styles.profileInfo}>
                   <ThemedText style={styles.profileName}>{userName}</ThemedText>
-                )}
-              </Animated.View>
-            </TouchableOpacity>
-            
-            {/* Animated logout button */}
-            {showLogout && (
-              <Animated.View 
-                style={[
-                  styles.logoutButtonContainer,
-                  { 
-                    opacity: logoutOpacity,
-                    transform: [{ scale: logoutScale }]
-                  }
-                ]}
-              >
+                </View>
                 <TouchableOpacity 
-                  style={styles.logoutButton}
-                  onPress={(e) => {
-                    e.stopPropagation(); // Prevent sidebar toggle
-                    handleLogout();
-                  }}
+                  style={styles.logoutButtonInline}
+                  onPress={handleLogout}
                 >
-                  <LogOut size={16} color="#FFFFFF" style={styles.logoutIcon} />
-                  <ThemedText style={styles.logoutText}>Logout</ThemedText>
+                  <LogOut size={20} color="#FFFFFF" />
                 </TouchableOpacity>
-              </Animated.View>
+              </View>
+            ) : (
+              /* Collapsed: Profile with logout button below */
+              <View style={styles.profileCollapsed}>
+                <View style={styles.profileIconBox}>
+                  <User size={20} color="#FFFFFF" />
+                </View>
+                <TouchableOpacity 
+                  style={styles.logoutButtonBelow}
+                  onPress={handleLogout}
+                >
+                  <LogOut size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </Animated.View>
-      </TouchableOpacity>
+      </TouchableWithoutFeedback>
       
       {/* Main content */}
-      <TouchableWithoutFeedback onPress={() => {
-        if (showLogout) hideLogout();
-      }}>
-        <View style={styles.content}>
-          {/* Use context approach instead of directly cloning with props */}
-          <SchoolContext.Provider value={{ schoolName }}>
-            {children}
-          </SchoolContext.Provider>
-        </View>
-      </TouchableWithoutFeedback>
+      <View style={styles.content}>
+        {/* Use context approach to pass schoolName to children */}
+        <SchoolContext.Provider value={{ schoolName }}>
+          {children}
+        </SchoolContext.Provider>
+      </View>
     </View>
   );
 }
@@ -443,23 +309,18 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
-  sidebarTouchable: {
-    zIndex: 10,
-  },
   sidebar: {
     backgroundColor: '#192549', // Dark blue (matching screenshots)
     height: '100%',
-    paddingTop: 20,
     display: 'flex',
     flexDirection: 'column',
-    position: 'relative',
+    zIndex: 10,
   },
-  sidebarHeader: {
-    height: 40,
-    flexDirection: 'row',
+  header: {
+    height: 60,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 32,
+    justifyContent: 'center',
+    marginBottom: 20,
     position: 'relative',
   },
   logoText: {
@@ -468,49 +329,38 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   logoTextSmall: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
   },
   navContainer: {
     flex: 1,
-    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     paddingHorizontal: 12,
   },
   navGroup: {
-    position: 'relative',
     marginBottom: 8,
   },
   bottomNavGroup: {
     marginTop: 'auto',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  iconContainer: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    paddingTop: 16,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 46,
     marginBottom: 8,
-    zIndex: 1,
     borderRadius: 8,
-    paddingHorizontal: 16,
   },
   navItemExpanded: {
+    paddingHorizontal: 16,
     justifyContent: 'flex-start',
   },
   navItemCollapsed: {
-    justifyContent: 'center', // Keep centered when collapsed
-    alignItems: 'center', // Center content vertically
-    paddingHorizontal: 23, // Center the icon in collapsed state
+    justifyContent: 'center',
   },
   navItemActive: {
     backgroundColor: '#304878', // Active item background color
@@ -528,34 +378,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   profileContainer: {
-    position: 'relative',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingTop: 16,
   },
-  profileIconContainer: {
-    width: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  profileSection: {
+  // Expanded profile styles
+  profileExpanded: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 8,
   },
-  profileSectionCollapsed: {
+  profileInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  // Collapsed profile styles
+  profileCollapsed: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center', // Center properly
-    paddingHorizontal: 17, // Center in collapsed state
+  },
+  profileIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#304878',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   profileIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#304878',
     alignItems: 'center',
     justifyContent: 'center',
@@ -565,30 +422,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '500',
   },
-  logoutButtonContainer: {
-    position: 'absolute',
-    right: -110, // Position it away from the sidebar
-    top: 0,
-    zIndex: 100,
-  },
-  logoutButton: {
-    flexDirection: 'row',
+  // Inline logout button (when expanded)
+  logoutButtonInline: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#304878',
     alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#304878', // Match sidebar highlight
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
-    minWidth: 100,
+    justifyContent: 'center',
+    marginLeft: 8,
   },
-  logoutIcon: {
-    marginRight: 8,
-  },
-  logoutText: {
-    color: '#FFFFFF', // White text to match sidebar
-    fontWeight: '500',
+  // Below logout button (when collapsed)
+  logoutButtonBelow: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#304878',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 });

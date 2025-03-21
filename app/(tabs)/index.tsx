@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Animated, Text } from 'react-native';
 import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
 import { router } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useSchoolContext } from '@/components/PersistentSidebar';
+
+// Import the SchoolProvider from a consistent location
+// Adjust this import path based on your actual component location
+import { useSchoolContext } from '@/components/SchoolProvider';
 
 // Define interfaces for type safety based on Firestore structure
 interface Driver {
@@ -77,7 +81,17 @@ const fetchCollection = <T,>(collection: string): Promise<T[]> => {
 };
 
 export default function HomeScreen() {
-  const { schoolName } = useSchoolContext();
+  // Verify authentication state
+  const { isSignedIn, isLoaded } = useAuth();
+  
+  useEffect(() => {
+    console.log("Home screen auth state:", { isSignedIn, isLoaded });
+  }, [isSignedIn, isLoaded]);
+  
+  // Get school context - use conditional to handle potential missing provider
+  const schoolContext = useSchoolContext ? useSchoolContext() : { schoolName: "Demo School" };
+  const { schoolName } = schoolContext;
+  
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -87,6 +101,9 @@ export default function HomeScreen() {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Verify that we're on the home page and authenticated
+    console.log("Home screen mounted, fetching data");
+    
     // Fetch data on component mount
     const loadData = async () => {
       setIsLoading(true);
@@ -118,6 +135,23 @@ export default function HomeScreen() {
   const navigateToDetailView = (path: string) => {
     router.push(path as any);
   };
+
+  if (!isLoaded || isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
+  // If we somehow got here without being authenticated
+  if (!isSignedIn) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Please log in to view the dashboard</Text>
+      </View>
+    );
+  }
 
   const renderDrivers = () => {
     return (
@@ -275,6 +309,11 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     backgroundColor: '#F8FAFC',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pageHeader: {
     padding: 24,

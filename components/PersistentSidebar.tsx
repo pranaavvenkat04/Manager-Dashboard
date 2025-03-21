@@ -1,12 +1,16 @@
 import React, { ReactNode, useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback, Platform } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback, Platform, Alert } from 'react-native';
 import { usePathname, router } from 'expo-router';
 import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '@clerk/clerk-expo';
 
 import { ThemedText } from './ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+
+import { useAuth } from '@clerk/clerk-expo';
+// Removed duplicate import of 'router'
 
 // Define props with schoolName to pass to children components
 interface SchoolContextProps {
@@ -63,6 +67,8 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const [showLogout, setShowLogout] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const { user } = useUser();
+
   
   // Use refs for animations to maintain consistent behavior
   const sidebarWidth = useRef(new Animated.Value(230)).current;
@@ -71,6 +77,8 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const logoutScale = useRef(new Animated.Value(0.85)).current;
   const highlightPosition = useRef(new Animated.Value(0)).current;
 
+  
+  
   // Load saved sidebar state on component mount
   useEffect(() => {
     const loadSidebarState = async () => {
@@ -114,20 +122,10 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
 
   // Fetch user profile and school data
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Mock API calls - in real app, these would be Firebase queries
-        setTimeout(() => {
-          setUserName('Jane Doe');
-          setSchoolName('NYIT');
-        }, 500);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-    
-    fetchData();
-  }, []);
+    if (user) {
+      setUserName(user.fullName || 'User');
+    }
+  }, [user]);
 
   // Save sidebar state when it changes
   const saveSidebarState = async (isOpen: boolean) => {
@@ -255,13 +253,68 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   }, []);
 
   // Handle logout
-  const handleLogout = () => {
-    hideLogout();
-    // In real app - implement logout logic:
-    // await firebase.auth().signOut();
-    // router.replace('/login');
-    alert('Logging out...');
-  };
+  // In PersistentSidebar.tsx
+// Add these imports at the top
+
+
+// Then inside your component function, add:
+const { signOut } = useAuth();
+
+// Update the handleLogout function
+const handleLogout = async () => {
+  console.log("[Settings] Logout button clicked");
+  
+  // Check if we're on web platform
+  if (Platform.OS === 'web') {
+    // Web browser confirmation
+    if (window.confirm("Are you sure you want to logout?")) {
+      try {
+        console.log("[Settings] About to call signOut()");
+        await signOut();
+        console.log("[Settings] signOut completed successfully");
+        
+        setTimeout(() => {
+          console.log("[Settings] Attempting navigation to login");
+          router.replace('/login');
+        }, 300);
+      } catch (error) {
+        console.error("[Settings] Error during logout:", error);
+      }
+    } else {
+      console.log("[Settings] Logout cancelled");
+    }
+  } else {
+    // Mobile Alert
+    Alert.alert(
+      "Confirm Logout",
+      "Are you sure you want to logout?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => console.log("[Settings] Logout cancelled")
+        },
+        {
+          text: "Logout",
+          onPress: async () => {
+            try {
+              console.log("[Settings] About to call signOut()");
+              await signOut();
+              console.log("[Settings] signOut completed successfully");
+              
+              setTimeout(() => {
+                console.log("[Settings] Attempting navigation to login");
+                router.replace('/login');
+              }, 300);
+            } catch (error) {
+              console.error("[Settings] Error during logout:", error);
+            }
+          }
+        }
+      ]
+    );
+  }
+};
 
   // Calculate the position for the animated highlight
   // We're not using this anymore as we're applying active styles directly to nav items
@@ -387,13 +440,13 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
                 </View>
               </View>
               <Animated.View style={{ 
-                opacity: textOpacity,
-                flex: 1
-              }}>
-                {sidebarOpen && (
-                  <ThemedText style={styles.profileName}>{userName}</ThemedText>
-                )}
-              </Animated.View>
+                  opacity: textOpacity,
+                  flex: 1
+                }}>
+                  {sidebarOpen && (
+                    <ThemedText style={styles.profileName}>{userName}</ThemedText>
+                  )}
+                </Animated.View>
             </TouchableOpacity>
             
             {/* Animated logout button */}

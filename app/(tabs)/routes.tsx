@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated, Platform } from 'react-native';
-import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Clock, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated, Platform, Modal } from 'react-native';
+import { Search, Plus, Filter, MoreVertical, Edit, Trash2, Clock, MapPin, X } from 'lucide-react';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
+import UpdateRouteModal from '@/components/modals/UpdateRouteModal';
 import AddRouteModal from '@/components/modals/AddRouteModal';
 
 // Define interface for Route based on Firestore structure
@@ -26,13 +27,15 @@ interface Driver {
   name: string;
 }
 
-// Define interface for RouteData from modal
+// Define interface for RouteData
 interface RouteData {
   name: string;
   routeKey: string;
   startTime: string;
   endTime: string;
   stops: any[];
+  estimatedDuration?: number;
+  assignedDriverId?: string;
 }
 
 // Mock Firebase functions
@@ -57,6 +60,42 @@ const fetchRoutes = (): Promise<Route[]> => {
   });
 };
 
+// Mock function to fetch a specific route with its stops
+const fetchRouteDetails = (routeId: string, schoolId: string): Promise<RouteData> => {
+  return new Promise((resolve) => {
+    // Simulate API delay
+    setTimeout(() => {
+      // Create mock stops based on route ID
+      const stops = [];
+      const stopsCount = 5 + (parseInt(routeId.replace('route', '')) % 5);
+      
+      for (let i = 1; i <= stopsCount; i++) {
+        stops.push({
+          id: `stop-${routeId}-${i}`,
+          name: `Stop ${i} for ${routeId}`,
+          address: `${100 + i} Main St, New York, NY ${10000 + i}`,
+          lat: 40.7 + (Math.random() * 0.1),
+          lng: -73.9 + (Math.random() * 0.1),
+          eta: `${8 + Math.floor(i/2)}:${(i * 5) % 60 < 10 ? '0' + (i * 5) % 60 : (i * 5) % 60} AM`
+        });
+      }
+      
+      // Create mock route data
+      const routeData: RouteData = {
+        name: `Route ${routeId.replace('route', '')}`,
+        routeKey: `RT${1000 + parseInt(routeId.replace('route', ''))}`,
+        startTime: '08:00 AM',
+        endTime: '09:15 AM',
+        stops: stops,
+        estimatedDuration: 75, // minutes
+        assignedDriverId: `driver${parseInt(routeId.replace('route', '')) % 3 + 1}`
+      };
+      
+      resolve(routeData);
+    }, 800);
+  });
+};
+
 const fetchDrivers = (): Promise<Driver[]> => {
   return new Promise((resolve) => {
     setTimeout(() => {
@@ -74,17 +113,28 @@ const fetchDrivers = (): Promise<Driver[]> => {
 
 export default function RoutesScreen() {
   const { schoolName } = useSchoolContext();
+  // Use a default schoolId since it's not available in the context
+  const schoolId = 'school1';
   const [routes, setRoutes] = useState<Route[]>([]);
   const [filteredRoutes, setFilteredRoutes] = useState<Route[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
-  const [actionMenuVisible, setActionMenuVisible] = useState(false);
-  const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
   
-  // State for route modal
-  const [modalVisible, setModalVisible] = useState(false);
+  // State for action menu
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
+  
+  // State for delete confirmation modal
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [routeToDelete, setRouteToDelete] = useState<Route | null>(null);
+  
+  // State for modals
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [updateModalVisible, setUpdateModalVisible] = useState(false);
+  const [selectedRouteData, setSelectedRouteData] = useState<RouteData | undefined>(undefined);
+  const [isLoadingRouteData, setIsLoadingRouteData] = useState(false);
   
   // Animation for content fade-in
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -133,17 +183,17 @@ export default function RoutesScreen() {
   }, [searchQuery, routes]);
 
   // Action menu handlers
-  const showActionMenu = (route: Route, event: any) => {
-    setSelectedRoute(route);
-    // In a real implementation, get the touch coordinates
-    // For now, we'll use mock coordinates
-    setActionMenuPosition({ x: 100, y: 100 });
-    setActionMenuVisible(true);
-  };
-
-  const hideActionMenu = () => {
-    setActionMenuVisible(false);
-    setSelectedRoute(null);
+  const toggleActionMenu = (route: Route) => {
+    if (activeRouteId === route.id) {
+      // If this route's menu is already open, close it
+      setActionMenuVisible(false);
+      setActiveRouteId(null);
+    } else {
+      // Otherwise, open this route's menu
+      setSelectedRoute(route);
+      setActiveRouteId(route.id);
+      setActionMenuVisible(true);
+    }
   };
 
   // Get driver name by ID
@@ -152,37 +202,59 @@ export default function RoutesScreen() {
     return driver ? driver.name : 'Unassigned';
   };
 
-  const handleEditRoute = (route: Route) => {
-    hideActionMenu();
-    Alert.alert('Edit Route', `Edit ${route.name}'s information`);
-    // In a real implementation, navigate to edit form
+  const handleEditRoute = async (route: Route) => {
+    // Close action menu
+    setActionMenuVisible(false);
+    setActiveRouteId(null);
+    
+    // Show loading state
+    setIsLoadingRouteData(true);
+    
+    try {
+      // In a real implementation, this would fetch from Firebase
+      // For now, we use our mock function
+      const routeData = await fetchRouteDetails(route.id, route.school_id);
+      
+      // Set the route data and show the update modal
+      setSelectedRouteData(routeData);
+      setUpdateModalVisible(true);
+    } catch (error) {
+      console.error('Error loading route details:', error);
+      Alert.alert('Error', 'Failed to load route details. Please try again.');
+    } finally {
+      setIsLoadingRouteData(false);
+    }
   };
 
-  const handleDeleteRoute = (route: Route) => {
-    hideActionMenu();
-    Alert.alert(
-      'Delete Route',
-      `Are you sure you want to delete ${route.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => {
-            // In a real implementation, delete from Firebase
-            const updatedRoutes = routes.filter(r => r.id !== route.id);
-            setRoutes(updatedRoutes);
-            setFilteredRoutes(updatedRoutes);
-            Alert.alert('Success', 'Route has been deleted');
-          }
-        }
-      ]
-    );
+  const showDeleteConfirmation = (route: Route) => {
+    // Close action menu
+    setActionMenuVisible(false);
+    setActiveRouteId(null);
+    
+    // Set route to delete and show delete modal
+    setRouteToDelete(route);
+    setDeleteModalVisible(true);
+  };
+
+  const handleDeleteRoute = () => {
+    if (!routeToDelete) return;
+    
+    // In a real implementation, delete from Firebase
+    const updatedRoutes = routes.filter(r => r.id !== routeToDelete.id);
+    setRoutes(updatedRoutes);
+    setFilteredRoutes(updatedRoutes);
+    
+    // Clear state and close modal
+    setRouteToDelete(null);
+    setDeleteModalVisible(false);
+    
+    // Show success message
+    Alert.alert('Success', 'Route has been deleted');
   };
 
   const handleAddNewRoute = () => {
     // Open the add route modal
-    setModalVisible(true);
+    setAddModalVisible(true);
   };
   
   // Handle save from modal
@@ -193,8 +265,8 @@ export default function RoutesScreen() {
       id: `route-${Date.now()}`,
       route_key: routeData.routeKey,
       name: routeData.name,
-      school_id: 'school1', // Use current school ID
-      assigned_driver_id: drivers.length > 0 ? drivers[0].id : '', // Assign to first driver for now
+      school_id: schoolId || 'school1', // Use current school ID
+      assigned_driver_id: routeData.assignedDriverId || '', 
       start_time: routeData.startTime,
       end_time: routeData.endTime,
       stops_count: routeData.stops.length
@@ -203,15 +275,96 @@ export default function RoutesScreen() {
     const updatedRoutes = [newRoute, ...routes];
     setRoutes(updatedRoutes);
     setFilteredRoutes(updatedRoutes);
-    setModalVisible(false);
+    setAddModalVisible(false);
     
     // Show success message
     Alert.alert('Success', 'Route has been created successfully');
   };
   
-  // Close modal
-  const handleCloseModal = () => {
-    setModalVisible(false);
+  // Handle update from modal
+  const handleUpdateRoute = (routeData: RouteData) => {
+    // In a real implementation, this would update in Firebase
+    // For now, we'll update our local state
+    if (selectedRoute) {
+      const updatedRoute: Route = {
+        ...selectedRoute,
+        name: routeData.name,
+        route_key: routeData.routeKey,
+        start_time: routeData.startTime,
+        end_time: routeData.endTime,
+        assigned_driver_id: routeData.assignedDriverId || '',
+        stops_count: routeData.stops.length
+      };
+      
+      const updatedRoutes = routes.map(route => 
+        route.id === selectedRoute.id ? updatedRoute : route
+      );
+      
+      setRoutes(updatedRoutes);
+      setFilteredRoutes(updatedRoutes);
+      setUpdateModalVisible(false);
+      
+      // Show success message
+      Alert.alert('Success', 'Route has been updated successfully');
+    }
+  };
+  
+  // Close modals
+  const handleCloseAddModal = () => {
+    setAddModalVisible(false);
+  };
+  
+  const handleCloseUpdateModal = () => {
+    setUpdateModalVisible(false);
+    setSelectedRouteData(undefined);
+  };
+
+  // Render delete confirmation modal
+  const renderDeleteConfirmationModal = () => {
+    if (!routeToDelete) return null;
+    
+    return (
+      <Modal
+        visible={deleteModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmationModal}>
+            <View style={styles.confirmationHeader}>
+              <Trash2 size={24} color="#EF4444" />
+              <ThemedText style={styles.confirmationTitle}>Delete Route</ThemedText>
+            </View>
+            
+            <View style={styles.confirmationContent}>
+              <ThemedText style={styles.confirmationText}>
+                Are you sure you want to delete <ThemedText style={styles.routeNameText}>{routeToDelete.name}</ThemedText>?
+              </ThemedText>
+              <ThemedText style={styles.confirmationSubtext}>
+                This action cannot be undone. All data associated with this route will be permanently removed.
+              </ThemedText>
+            </View>
+            
+            <View style={styles.confirmationButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setDeleteModalVisible(false)}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleDeleteRoute}
+              >
+                <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   // Render route item
@@ -244,28 +397,60 @@ export default function RoutesScreen() {
         </View>
       </View>
       
-      <TouchableOpacity 
-        style={styles.actionButton} 
-        onPress={(e) => showActionMenu(item, e)}
-      >
-        <MoreVertical size={20} color="#6B7280" />
-      </TouchableOpacity>
-      
-      {/* Action Menu (positioned absolutely in a real implementation) */}
-      {actionMenuVisible && selectedRoute?.id === item.id && (
-        <View style={[styles.actionMenu, { top: actionMenuPosition.y, left: actionMenuPosition.x }]}>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleEditRoute(item)}>
-            <Edit size={16} color="#4B5563" />
-            <ThemedText style={styles.actionMenuText}>Edit</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleDeleteRoute(item)}>
-            <Trash2 size={16} color="#EF4444" />
-            <ThemedText style={[styles.actionMenuText, styles.deleteText]}>Delete</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.actionContainer}>
+        <TouchableOpacity 
+          style={styles.actionButton} 
+          onPress={() => toggleActionMenu(item)}
+        >
+          <MoreVertical size={20} color="#6B7280" />
+        </TouchableOpacity>
+        
+        {/* Action Menu - displayed inline instead of absolutely positioned */}
+        {actionMenuVisible && activeRouteId === item.id && (
+          <View style={styles.actionMenu}>
+            <TouchableOpacity 
+              style={styles.actionMenuItem} 
+              onPress={() => handleEditRoute(item)}
+            >
+              <Edit size={16} color="#4B5563" />
+              <ThemedText style={styles.actionMenuText}>Edit</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionMenuItem} 
+              onPress={() => showDeleteConfirmation(item)}
+            >
+              <Trash2 size={16} color="#EF4444" />
+              <ThemedText style={[styles.actionMenuText, styles.deleteText]}>Delete</ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </View>
   );
+
+  // Render loading overlay when loading route data
+  const renderLoadingOverlay = () => {
+    if (!isLoadingRouteData) return null;
+    
+    return (
+      <View style={styles.loadingOverlay}>
+        <View style={styles.loadingContainer}>
+          <ThemedText style={styles.loadingText}>Loading route data...</ThemedText>
+          {Platform.OS === 'web' && (
+            <div className="spinner" style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              border: '3px solid rgba(67, 97, 238, 0.3)',
+              borderTopColor: '#4361ee',
+              animation: 'spin 1s linear infinite',
+              marginTop: '12px'
+            }}></div>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.mainContent}>
@@ -314,10 +499,39 @@ export default function RoutesScreen() {
       
       {/* Add Route Modal */}
       <AddRouteModal
-        visible={modalVisible}
-        onClose={handleCloseModal}
+        visible={addModalVisible}
+        onClose={handleCloseAddModal}
         onSave={handleSaveRoute}
       />
+      
+      {/* Update Route Modal */}
+      {/* Conditional rendering to prevent issues with undefined route data */}
+      {selectedRouteData && (
+        <UpdateRouteModal
+          visible={updateModalVisible}
+          onClose={handleCloseUpdateModal}
+          onUpdate={handleUpdateRoute}
+          route={selectedRouteData}
+        />
+      )}
+      
+      {/* Delete Confirmation Modal */}
+      {renderDeleteConfirmationModal()}
+      
+      {/* Loading Overlay */}
+      {renderLoadingOverlay()}
+      
+      {/* Add CSS animation for spinner */}
+      {Platform.OS === 'web' && (
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `
+        }} />
+      )}
     </View>
   );
 }
@@ -402,6 +616,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    position: 'relative',
   },
   routeInfo: {
     flex: 1,
@@ -464,13 +679,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#4B5563',
   },
+  actionContainer: {
+    position: 'relative',
+  },
   actionButton: {
     padding: 8,
   },
   actionMenu: {
     position: 'absolute',
-    right: 16,
     top: 40,
+    right: 0,
     backgroundColor: 'white',
     borderRadius: 8,
     shadowColor: '#000',
@@ -478,16 +696,18 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
     elevation: 5,
-    zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    width: 150,
+    zIndex: 1000,
   },
   actionMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    minWidth: 120,
   },
   actionMenuText: {
     marginLeft: 8,
@@ -496,5 +716,113 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: '#EF4444',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#4B5563',
+  },
+  // Delete confirmation modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmationModal: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: Platform.OS === 'web' ? 400 : '90%',
+    maxWidth: 500,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  confirmationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  confirmationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  confirmationContent: {
+    marginBottom: 24,
+  },
+  confirmationText: {
+    fontSize: 16,
+    color: '#4B5563',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  routeNameText: {
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  confirmationSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  confirmationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  cancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+    marginRight: 12,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  deleteButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
 });

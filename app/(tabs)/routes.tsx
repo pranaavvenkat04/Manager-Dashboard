@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
+import AddRouteModal from '@/components/modals/AddRouteModal';
 
 // Define interface for Route based on Firestore structure
 interface Route {
@@ -23,6 +24,15 @@ interface Route {
 interface Driver {
   id: string;
   name: string;
+}
+
+// Define interface for RouteData from modal
+interface RouteData {
+  name: string;
+  routeKey: string;
+  startTime: string;
+  endTime: string;
+  stops: any[];
 }
 
 // Mock Firebase functions
@@ -72,6 +82,9 @@ export default function RoutesScreen() {
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
+  
+  // State for route modal
+  const [modalVisible, setModalVisible] = useState(false);
   
   // Animation for content fade-in
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -168,8 +181,37 @@ export default function RoutesScreen() {
   };
 
   const handleAddNewRoute = () => {
-    Alert.alert('Add Route', 'Navigate to add route form');
-    // In a real implementation, navigate to add form
+    // Open the add route modal
+    setModalVisible(true);
+  };
+  
+  // Handle save from modal
+  const handleSaveRoute = (routeData: RouteData) => {
+    // In a real implementation, this would save to Firebase
+    // For now, we'll add it to our local state
+    const newRoute: Route = {
+      id: `route-${Date.now()}`,
+      route_key: routeData.routeKey,
+      name: routeData.name,
+      school_id: 'school1', // Use current school ID
+      assigned_driver_id: drivers.length > 0 ? drivers[0].id : '', // Assign to first driver for now
+      start_time: routeData.startTime,
+      end_time: routeData.endTime,
+      stops_count: routeData.stops.length
+    };
+    
+    const updatedRoutes = [newRoute, ...routes];
+    setRoutes(updatedRoutes);
+    setFilteredRoutes(updatedRoutes);
+    setModalVisible(false);
+    
+    // Show success message
+    Alert.alert('Success', 'Route has been created successfully');
+  };
+  
+  // Close modal
+  const handleCloseModal = () => {
+    setModalVisible(false);
   };
 
   // Render route item
@@ -269,6 +311,13 @@ export default function RoutesScreen() {
           showsVerticalScrollIndicator={false}
         />
       </Animated.View>
+      
+      {/* Add Route Modal */}
+      <AddRouteModal
+        visible={modalVisible}
+        onClose={handleCloseModal}
+        onSave={handleSaveRoute}
+      />
     </View>
   );
 }

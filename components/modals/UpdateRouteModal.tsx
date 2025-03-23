@@ -19,7 +19,6 @@ import AddressSearch from '@/components/routes/search/AddressSearch';
 import StopsList from '@/components/routes/stops/StopsList';
 
 import { 
-  AddRouteModalProps, 
   AddressResult, 
   StopItem, 
   RouteData,
@@ -28,15 +27,23 @@ import {
 } from '@/types/RouteTypes';
 
 import { validateRouteForm } from '@/utils/ValidationUtils';
-import { calculateRouteTimings, fetchDrivers, generateRandomRouteKey } from '@/utils/RouteUtils';
+import { calculateRouteTimings, fetchDrivers } from '@/utils/RouteUtils';
 import styles from '@/styles/RouteModalStyles';
-import { webDatepickerStyles } from '@/styles/ScheduleStyles';
+import {webDatepickerStyles} from '@/styles/ScheduleStyles';
+
+interface UpdateRouteModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onUpdate: (routeData: RouteData) => void;
+  route?: RouteData;
+}
 
 /**
- * Main modal component for adding a new route
+ * Modal component for updating an existing route
+ * Reuses the same components as AddRouteModal
  */
-const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
-  // Form state
+const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModalProps) => {
+  // Form state - initialized with existing route data if available
   const [routeName, setRouteName] = useState('');
   const [routeKey, setRouteKey] = useState('');
   const [startTime, setStartTime] = useState('08:00 AM');
@@ -51,7 +58,7 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
   const [selectedDriver, setSelectedDriver] = useState<string>('');
   const [drivers, setDrivers] = useState<{id: string; name: string}[]>([]);
   
-  // New schedule state
+  // Schedule state
   const [schedule, setSchedule] = useState<RouteSchedule>({
     operatingDays: [1, 2, 3, 4, 5], // Monday to Friday by default
     exceptions: [],
@@ -60,6 +67,34 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
       endDate: undefined
     }
   });
+  
+  // Load route data when modal becomes visible and route data is provided
+  useEffect(() => {
+    if (visible && route) {
+      setRouteName(route.name);
+      setRouteKey(route.routeKey);
+      setStartTime(route.startTime);
+      setEndTime(route.endTime);
+      setStops(route.stops);
+      setEstimatedDuration(route.estimatedDuration || 0);
+      setSelectedDriver(route.assignedDriverId || '');
+      
+      // Load schedule if available
+      if (route.schedule) {
+        setSchedule(route.schedule);
+      } else {
+        // Reset to default if no schedule
+        setSchedule({
+          operatingDays: [1, 2, 3, 4, 5],
+          exceptions: [],
+          effectiveDates: {
+            startDate: new Date(),
+            endDate: undefined
+          }
+        });
+      }
+    }
+  }, [visible, route]);
   
   // Add CSS for improved styling on web
   useEffect(() => {
@@ -105,10 +140,10 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
         }
         
         /* Button hover effects */
-        .saveButton {
+        .updateButton {
           transition: all 0.2s ease !important;
         }
-        .saveButton:hover:not(:disabled) {
+        .updateButton:hover:not(:disabled) {
           background-color: #2341CE !important;
           transform: translateY(-1px) !important;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
@@ -140,11 +175,11 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
     }
   }, [visible]);
   
-  // Generate a random route key on mount
+  // Fetch drivers when modal opens
   useEffect(() => {
     if (visible) {
-      const randomKey = generateRandomRouteKey();
-      setRouteKey(randomKey);
+      fetchDrivers()
+        .then(driversData => setDrivers(driversData));
     }
   }, [visible]);
   
@@ -152,10 +187,6 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
   useEffect(() => {
     if (!visible) {
       resetForm();
-    } else {
-      // Fetch drivers when modal opens
-      fetchDrivers()
-        .then(driversData => setDrivers(driversData));
     }
   }, [visible]);
   
@@ -246,31 +277,58 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
   
   // Reset form state
   const resetForm = () => {
-    setRouteName('');
-    setRouteKey('');
-    setStartTime('08:00 AM');
-    setEndTime('09:15 AM');
-    setCalculatedEndTime('');
-    setEstimatedDuration(0);
-    setStops([]);
-    setSelectedDriver('');
+    if (route) {
+      // Reset to initial route data
+      setRouteName(route.name);
+      setRouteKey(route.routeKey);
+      setStartTime(route.startTime);
+      setEndTime(route.endTime);
+      setStops(route.stops);
+      setEstimatedDuration(route.estimatedDuration || 0);
+      setSelectedDriver(route.assignedDriverId || '');
+      
+      // Reset schedule
+      if (route.schedule) {
+        setSchedule(route.schedule);
+      } else {
+        setSchedule({
+          operatingDays: [1, 2, 3, 4, 5],
+          exceptions: [],
+          effectiveDates: {
+            startDate: new Date(),
+            endDate: undefined
+          }
+        });
+      }
+    } else {
+      // Reset to empty state if no route provided
+      setRouteName('');
+      setRouteKey('');
+      setStartTime('08:00 AM');
+      setEndTime('09:15 AM');
+      setCalculatedEndTime('');
+      setEstimatedDuration(0);
+      setStops([]);
+      setSelectedDriver('');
+      
+      // Reset schedule to default
+      setSchedule({
+        operatingDays: [1, 2, 3, 4, 5],
+        exceptions: [],
+        effectiveDates: {
+          startDate: new Date(),
+          endDate: undefined
+        }
+      });
+    }
+    
     setFieldErrors({});
     setValidationErrors([]);
     setShowErrorMessage(false);
-    
-    // Reset schedule to default values
-    setSchedule({
-      operatingDays: [1, 2, 3, 4, 5], // Monday to Friday by default
-      exceptions: [],
-      effectiveDates: {
-        startDate: new Date(),
-        endDate: undefined
-      }
-    });
   };
   
-  // Validate form and save
-  const handleSave = () => {
+  // Validate form and update
+  const handleUpdate = () => {
     // Validate form including schedule
     const { isValid, errors, fieldErrors: newFieldErrors } = validateRouteForm(
       routeName,
@@ -300,26 +358,26 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
       stops: stops,
       estimatedDuration: estimatedDuration,
       assignedDriverId: selectedDriver,
-      schedule: schedule  // Include schedule data
+      schedule: schedule // Include schedule data
     };
     
-    // Simple mock save method
+    // Simple mock update method
     try {
       // Show loading state
       setIsSaving(true);
       
       // Simulate network delay
       setTimeout(() => {
-        // Call the save handler passed in props
-        onSave(routeData);
+        // Call the update handler passed in props
+        onUpdate(routeData);
         setIsSaving(false);
       }, 1000);
       
     } catch (error) {
-      console.error('Error saving route:', error);
+      console.error('Error updating route:', error);
       Alert.alert(
         'Error',
-        'Failed to save route. Please try again.',
+        'Failed to update route. Please try again.',
         [{ text: 'OK', style: 'default' }]
       );
       setIsSaving(false);
@@ -340,7 +398,7 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
         <View style={styles.modalView}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
-            <ThemedText style={styles.modalTitle}>Add New Route</ThemedText>
+            <ThemedText style={styles.modalTitle}>Update Route</ThemedText>
             <TouchableOpacity style={styles.closeButton} onPress={onClose} className="closeButton">
               <X size={24} color="#6B7280" />
             </TouchableOpacity>
@@ -456,9 +514,9 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
             
             <TouchableOpacity
               style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-              onPress={handleSave}
+              onPress={handleUpdate}
               disabled={isSaving}
-              className="saveButton"
+              className="updateButton"
             >
               {isSaving ? (
                 <View style={styles.savingContainer}>
@@ -472,10 +530,10 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
                     animation: 'spin 1s linear infinite',
                     marginRight: '8px'
                   }}></div>
-                  <ThemedText style={styles.saveButtonText}>Saving...</ThemedText>
+                  <ThemedText style={styles.saveButtonText}>Updating...</ThemedText>
                 </View>
               ) : (
-                <ThemedText style={styles.saveButtonText}>Save Route</ThemedText>
+                <ThemedText style={styles.saveButtonText}>Update Route</ThemedText>
               )}
             </TouchableOpacity>
           </View>
@@ -485,4 +543,4 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
   );
 };
 
-export default AddRouteModal;
+export default UpdateRouteModal;

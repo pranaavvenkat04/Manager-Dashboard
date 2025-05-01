@@ -1,21 +1,21 @@
 import React, { useState, useCallback } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Image, ActivityIndicator, Platform, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { useSignIn, useClerk, useUser } from '@clerk/clerk-expo';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+
+const auth = getAuth();
+const db = getFirestore();
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const { signIn, setActive, isLoaded } = useSignIn();
-  const clerk = useClerk();
-  const { user, isLoaded: isUserLoaded } = useUser();
   
   // Print debug info when the component loads
   React.useEffect(() => {
@@ -35,9 +35,42 @@ export default function LoginScreen() {
     }
   };
 
+  // Check if user is a manager
+  const checkIfUserIsManager = async (userId: string) => {
+    try {
+      // Get all schools
+      const schoolsRef = collection(db, "Schools");
+      const schoolsSnapshot = await getDocs(schoolsRef);
+      
+      // Check each school for the manager
+      for (const schoolDoc of schoolsSnapshot.docs) {
+        const schoolId = schoolDoc.id;
+        const managerRef = doc(db, `Schools/${schoolId}/Managers`, userId);
+        const managerSnap = await getDoc(managerRef);
+        
+        if (managerSnap.exists()) {
+          // Update last sign in time
+          await updateDoc(managerRef, {
+            lastSignIn: new Date().toISOString()
+          });
+          
+          return { 
+            data: managerSnap.data(), 
+            schoolId 
+          };
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error("Error checking if user is manager:", error);
+      return null;
+    }
+  };
+
   const handleSignIn = useCallback(async () => {
-    if (!isLoaded || loading) {
-        console.log("[Login] Sign-in not loaded yet or already loading");
+    if (loading) {
+        console.log("[Login] Already loading");
         return;
     }
 
@@ -47,56 +80,45 @@ export default function LoginScreen() {
     try {
         console.log("[Login] Attempting to sign in with:", email);
 
-        // Step 1: Create the sign-in attempt
-        const signInAttempt = await signIn.create({
-            identifier: email,
-            password,
-        });
+        // Step 1: Authenticate with Firebase
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        if (!user) {
+          throw new Error("Authentication succeeded but no user was returned");
+        }
 
-        // Step 2: Check if sign-in is complete
-        if (signInAttempt.status === 'complete') {
-            console.log("[Login] Sign-in successful, setting active session");
-
-            // Step 3: Set active session
-            await setActive({ session: signInAttempt.createdSessionId });
-
-            // Step 4: Fetch user data before navigating
-            const userData = await clerk.user;
-
-            if (!userData) throw new Error("Could not retrieve user data");
-
-            const userRole = userData.unsafeMetadata?.role;
-            console.log("[Login] User Role:", userRole);
-
-            // Step 5: Validate role before navigating
-            if (userRole === 'manager') {
-                console.log("[Login] Manager verified, proceeding to dashboard");
-                router.replace('/(tabs)');
-            } else {
-                console.log("[Login] User is not a manager:", userRole);
-                await clerk.signOut();
-                const errorMessage = 'Access denied. Only managers can access this application.';
-                setError(errorMessage);
-                showLoginFailedAlert(errorMessage);
-            }
+        // Step 2: Check if user is a manager
+        const managerData = await checkIfUserIsManager(user.uid);
+        
+        // Step 3: Validate manager role
+        if (managerData) {
+          console.log("[Login] Manager verified, proceeding to dashboard");
+          router.replace('/(tabs)');
         } else {
-            throw new Error('Invalid credentials or authentication step required.');
+          console.log("[Login] User is not a manager");
+          await auth.signOut();
+          const errorMessage = 'Access denied. Only managers can access this application.';
+          setError(errorMessage);
+          showLoginFailedAlert(errorMessage);
         }
     } catch (err: any) {
         console.error('[Login] Error signing in:', err);
 
         let errorMessage = 'Login failed. Please check your credentials and try again.';
 
-        if (err.errors && err.errors.length > 0) {
-            const clerkError = err.errors[0];
-
-            if (clerkError.code === 'form_identifier_not_found') {
-                errorMessage = 'Email not found. Please check your email address.';
-            } else if (clerkError.code === 'form_password_incorrect') {
-                errorMessage = 'Incorrect password. Please try again.';
-            } else {
-                errorMessage = clerkError.message || 'Invalid email or password. Please try again.';
-            }
+        // Handle common Firebase Auth errors
+        const errorCode = err.code;
+        if (errorCode === 'auth/user-not-found') {
+          errorMessage = 'Email not found. Please check your email address.';
+        } else if (errorCode === 'auth/wrong-password') {
+          errorMessage = 'Incorrect password. Please try again.';
+        } else if (errorCode === 'auth/invalid-email') {
+          errorMessage = 'Invalid email format. Please enter a valid email.';
+        } else if (errorCode === 'auth/too-many-requests') {
+          errorMessage = 'Too many failed login attempts. Please try again later.';
+        } else if (err.message) {
+          errorMessage = err.message;
         }
 
         setError(errorMessage);
@@ -104,29 +126,25 @@ export default function LoginScreen() {
     } finally {
         setLoading(false);
     }
-}, [isLoaded, email, password, signIn, setActive, clerk, loading]);
+  }, [email, password, loading]);
 
-
-  // Check for user data if we're already logged in
+  // Check if user is already logged in
   React.useEffect(() => {
-    const checkManagerStatus = async () => {
-      // Only proceed if user data is loaded and available
-      if (isUserLoaded && user) {
+    const checkAuthStatus = async () => {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
         console.log("[Login] User already logged in, checking role");
         
-        // Get the user role from unsafe metadata
-        const userRole = user.unsafeMetadata?.role;
+        // Check if user is a manager
+        const managerData = await checkIfUserIsManager(currentUser.uid);
         
-        console.log("[Login] User Role:", userRole);
-        
-        // Check if the user has the manager role
-        if (userRole === 'manager') {
+        if (managerData) {
           console.log("[Login] Manager verified, proceeding to dashboard");
           router.replace('/(tabs)');
         } else {
-          console.log("[Login] User is not a manager:", userRole);
+          console.log("[Login] User is not a manager");
           // Sign out the user if they're not a manager
-          await clerk.signOut();
+          await auth.signOut();
           const errorMessage = 'Access denied. Only managers can access this application.';
           setError(errorMessage);
           showLoginFailedAlert(errorMessage);
@@ -134,8 +152,8 @@ export default function LoginScreen() {
       }
     };
     
-    checkManagerStatus();
-  }, [isUserLoaded, user, clerk]);
+    checkAuthStatus();
+  }, []);
 
   const handleForgotPassword = () => {
     router.push('/forgot-password');

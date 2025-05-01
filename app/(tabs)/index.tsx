@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, ScrollView, Animated, Text } from 'react-native';
 import { ChevronRight, Activity, Users, Map, BarChart } from 'lucide-react';
 import { router } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
 // Import the SchoolProvider from a consistent location
 // Adjust this import path based on your actual component location
-import { useSchoolContext } from '@/components/SchoolProvider';
+import { useSchoolContext } from '@/components/PersistentSidebar';
 
 // Define interfaces for type safety based on Firestore structure
 interface Driver {
@@ -81,8 +81,20 @@ const fetchCollection = <T,>(collection: string): Promise<T[]> => {
 };
 
 export default function HomeScreen() {
-  // Verify authentication state
-  const { isSignedIn, isLoaded } = useAuth();
+  // Firebase Auth state
+  const auth = getAuth();
+  const [isSignedIn, setIsSignedIn] = useState(!!auth.currentUser);
+  const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Auth state change listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsSignedIn(!!user);
+      setIsLoaded(true);
+    });
+    
+    return () => unsubscribe();
+  }, []);
   
   useEffect(() => {
     console.log("Home screen auth state:", { isSignedIn, isLoaded });

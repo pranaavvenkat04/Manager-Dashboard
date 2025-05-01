@@ -3,14 +3,10 @@ import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback,
 import { usePathname, router } from 'expo-router';
 import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useUser } from '@clerk/clerk-expo';
-
+import { getAuth, signOut } from 'firebase/auth';
 import { ThemedText } from './ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-import { useAuth } from '@clerk/clerk-expo';
-// Removed duplicate import of 'router'
 
 // Define props with schoolName to pass to children components
 interface SchoolContextProps {
@@ -67,8 +63,9 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const [showLogout, setShowLogout] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
-  const { user } = useUser();
-
+  
+  // Firebase auth instance
+  const auth = getAuth();
   
   // Use refs for animations to maintain consistent behavior
   const sidebarWidth = useRef(new Animated.Value(230)).current;
@@ -76,8 +73,6 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
   const logoutOpacity = useRef(new Animated.Value(0)).current;
   const logoutScale = useRef(new Animated.Value(0.85)).current;
   const highlightPosition = useRef(new Animated.Value(0)).current;
-
-  
   
   // Load saved sidebar state on component mount
   useEffect(() => {
@@ -120,12 +115,35 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     }
   }, [pathname, initialLoad]);
 
-  // Fetch user profile and school data
+  // Fetch user profile and school data from Firebase
   useEffect(() => {
-    if (user) {
-      setUserName(user.fullName || 'User');
+    const loadUserData = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const parsedData = JSON.parse(userData);
+          setUserName(parsedData.fullName || `${parsedData.firstName || ''} ${parsedData.lastName || ''}`.trim() || 'User');
+          
+          // If school data is available
+          if (parsedData.schoolId) {
+            setSchoolName(parsedData.schoolName || 'School');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
+    };
+    
+    if (auth.currentUser) {
+      // Set user name from Firebase user if available
+      if (auth.currentUser.displayName) {
+        setUserName(auth.currentUser.displayName);
+      }
+      
+      // Try to load additional data from AsyncStorage
+      loadUserData();
     }
-  }, [user]);
+  }, [auth.currentUser]);
 
   // Save sidebar state when it changes
   const saveSidebarState = async (isOpen: boolean) => {
@@ -252,89 +270,66 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     };
   }, []);
 
-  // Handle logout
-  // In PersistentSidebar.tsx
-// Add these imports at the top
-
-
-// Then inside your component function, add:
-const { signOut } = useAuth();
-
-// Update the handleLogout function
-const handleLogout = async () => {
-  console.log("[Settings] Logout button clicked");
-  
-  // Check if we're on web platform
-  if (Platform.OS === 'web') {
-    // Web browser confirmation
-    if (window.confirm("Are you sure you want to logout?")) {
-      try {
-        console.log("[Settings] About to call signOut()");
-        await signOut();
-        console.log("[Settings] signOut completed successfully");
-        
-        setTimeout(() => {
-          console.log("[Settings] Attempting navigation to login");
-          router.replace('/login');
-        }, 300);
-      } catch (error) {
-        console.error("[Settings] Error during logout:", error);
+  // Handle logout with Firebase Auth
+  const handleLogout = async () => {
+    console.log("[Settings] Logout button clicked");
+    
+    // Check if we're on web platform
+    if (Platform.OS === 'web') {
+      // Web browser confirmation
+      if (window.confirm("Are you sure you want to logout?")) {
+        try {
+          console.log("[Settings] About to sign out from Firebase");
+          await signOut(auth);
+          console.log("[Settings] Firebase signOut completed successfully");
+          
+          // Clear any stored user data
+          await AsyncStorage.removeItem('userData');
+          
+          setTimeout(() => {
+            console.log("[Settings] Attempting navigation to login");
+            router.replace('/login');
+          }, 300);
+        } catch (error) {
+          console.error("[Settings] Error during logout:", error);
+        }
+      } else {
+        console.log("[Settings] Logout cancelled");
       }
     } else {
-      console.log("[Settings] Logout cancelled");
-    }
-  } else {
-    // Mobile Alert
-    Alert.alert(
-      "Confirm Logout",
-      "Are you sure you want to logout?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => console.log("[Settings] Logout cancelled")
-        },
-        {
-          text: "Logout",
-          onPress: async () => {
-            try {
-              console.log("[Settings] About to call signOut()");
-              await signOut();
-              console.log("[Settings] signOut completed successfully");
-              
-              setTimeout(() => {
-                console.log("[Settings] Attempting navigation to login");
-                router.replace('/login');
-              }, 300);
-            } catch (error) {
-              console.error("[Settings] Error during logout:", error);
+      // Mobile Alert
+      Alert.alert(
+        "Confirm Logout",
+        "Are you sure you want to logout?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => console.log("[Settings] Logout cancelled")
+          },
+          {
+            text: "Logout",
+            onPress: async () => {
+              try {
+                console.log("[Settings] About to sign out from Firebase");
+                await signOut(auth);
+                console.log("[Settings] Firebase signOut completed successfully");
+                
+                // Clear any stored user data
+                await AsyncStorage.removeItem('userData');
+                
+                setTimeout(() => {
+                  console.log("[Settings] Attempting navigation to login");
+                  router.replace('/login');
+                }, 300);
+              } catch (error) {
+                console.error("[Settings] Error during logout:", error);
+              }
             }
           }
-        }
-      ]
-    );
-  }
-};
-
-  // Calculate the position for the animated highlight
-  // We're not using this anymore as we're applying active styles directly to nav items
-  const getHighlightPosition = () => {
-    const basePosition = 70;  // Starting Y position
-    const itemHeight = 48;    // Height of each nav item
-    const spacing = 4;        // Space between items
-    const bottomOffset = 30;  // Extra space between top and bottom groups
-    
-    return highlightPosition.interpolate({
-      inputRange: Array.from({ length: ROUTES.length + BOTTOM_ROUTES.length }, (_, i) => i),
-      outputRange: Array.from({ length: ROUTES.length + BOTTOM_ROUTES.length }, (_, i) => {
-        if (i < ROUTES.length) {
-          return basePosition + (i * (itemHeight + spacing));
-        } else {
-          return basePosition + (ROUTES.length * (itemHeight + spacing)) + 
-                 bottomOffset + ((i - ROUTES.length) * (itemHeight + spacing));
-        }
-      }),
-    });
+        ]
+      );
+    }
   };
 
   // Render a navigation item

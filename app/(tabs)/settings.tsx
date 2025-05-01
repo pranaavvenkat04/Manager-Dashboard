@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
-import { useAuth } from '@clerk/clerk-expo';
+import { getAuth, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { router } from 'expo-router';
 
 import { Platform } from 'react-native';
@@ -16,17 +17,64 @@ export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [locationTracking, setLocationTracking] = useState(true);
-  const { signOut, isSignedIn } = useAuth();
-
-
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [userProfile, setUserProfile] = useState({
+    firstName: '',
+    lastName: ''
+  });
+  
+  const auth = getAuth();
+  
+  // Check if user is signed in
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsSignedIn(!!user);
+      console.log("[Settings] Auth state changed:", !!user);
+    });
+    
+    // Clean up subscription
+    return () => unsubscribe();
+  }, []);
+  
+  // Fetch user profile from Firestore
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (auth.currentUser?.uid) {
+        try {
+          const db = getFirestore();
+          const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUserProfile({
+              firstName: userData.firstName || '',
+              lastName: userData.lastName || ''
+            });
+          } else {
+            // If no Firestore document exists, try to parse from displayName
+            if (auth.currentUser?.displayName) {
+              const nameParts = auth.currentUser.displayName.split(' ');
+              setUserProfile({
+                firstName: nameParts[0] || '',
+                lastName: nameParts.slice(1).join(' ') || ''
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching user profile:", error);
+        }
+      }
+    };
+    
+    if (isSignedIn) {
+      fetchUserProfile();
+    }
+  }, [isSignedIn]);
 
   // Setting toggle handlers
   const toggleNotifications = () => setNotifications(!notifications);
   const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleLocationTracking = () => setLocationTracking(!locationTracking);
-  useEffect(() => {
-    console.log("[Settings] Auth state:", { signOut: !!signOut, isSignedIn });
-  }, [signOut, isSignedIn]);
 
   // Reset and logout handlers
   const handleResetApp = () => {
@@ -72,9 +120,9 @@ export default function SettingsScreen() {
       // Web browser confirmation
       if (window.confirm("Are you sure you want to logout?")) {
         try {
-          console.log("[Settings] About to call signOut()");
-          await signOut();
-          console.log("[Settings] signOut completed successfully");
+          console.log("[Settings] About to call Firebase signOut()");
+          await firebaseSignOut(auth);
+          console.log("[Settings] Firebase signOut completed successfully");
           
           setTimeout(() => {
             console.log("[Settings] Attempting navigation to login");
@@ -101,9 +149,9 @@ export default function SettingsScreen() {
             text: "Logout",
             onPress: async () => {
               try {
-                console.log("[Settings] About to call signOut()");
-                await signOut();
-                console.log("[Settings] signOut completed successfully");
+                console.log("[Settings] About to call Firebase signOut()");
+                await firebaseSignOut(auth);
+                console.log("[Settings] Firebase signOut completed successfully");
                 
                 setTimeout(() => {
                   console.log("[Settings] Attempting navigation to login");
@@ -140,6 +188,27 @@ export default function SettingsScreen() {
     </View>
   );
 
+  // Render user info section if signed in
+  const renderUserInfo = () => {
+    if (!isSignedIn) return null;
+    
+    const user = auth.currentUser;
+    
+    return (
+      <View style={styles.userInfoContainer}>
+        <View style={styles.userAvatar}>
+          <User size={28} color="#4361ee" />
+        </View>
+        <View style={styles.userDetails}>
+          <ThemedText style={styles.userName}>
+            {userProfile.firstName} {userProfile.lastName}
+          </ThemedText>
+          <ThemedText style={styles.userEmail}>{user?.email || 'No email provided'}</ThemedText>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.mainContent}>
       {/* Page Title */}
@@ -150,6 +219,9 @@ export default function SettingsScreen() {
       
       {/* Settings content */}
       <ScrollView style={styles.scrollView}>
+        {/* User info section */}
+        {renderUserInfo()}
+        
         <View style={styles.section}>
           <ThemedText style={styles.sectionHeader}>App Preferences</ThemedText>
           
@@ -221,8 +293,8 @@ export default function SettingsScreen() {
           
           <TouchableOpacity 
             style={styles.logoutButton}
-            onPress={handleLogout} // Make sure this is correctly pointing to the function
-            activeOpacity={0.7} // Add this to improve touch feedback
+            onPress={handleLogout}
+            activeOpacity={0.7}
           >
             <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
             <ThemedText style={styles.logoutButtonText}>Logout</ThemedText>
@@ -259,6 +331,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     marginTop: 4,
+  },
+  userInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2.22,
+    elevation: 2,
+  },
+  userAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#EBF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userDetails: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  userEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  userID: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   scrollView: {
     flex: 1,

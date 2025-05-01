@@ -29,7 +29,6 @@ import {
 import { validateRouteForm } from '@/utils/ValidationUtils';
 import { calculateRouteTimings, fetchDrivers } from '@/utils/RouteUtils';
 import styles from '@/styles/RouteModalStyles';
-import {webDatepickerStyles} from '@/styles/ScheduleStyles';
 
 interface UpdateRouteModalProps {
   visible: boolean;
@@ -71,13 +70,27 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
   // Load route data when modal becomes visible and route data is provided
   useEffect(() => {
     if (visible && route) {
-      setRouteName(route.name);
-      setRouteKey(route.routeKey);
-      setStartTime(route.startTime);
-      setEndTime(route.endTime);
-      setStops(route.stops);
-      setEstimatedDuration(route.estimatedDuration || 0);
-      setSelectedDriver(route.assignedDriverId || '');
+      // Handle both old and new property names for backward compatibility
+      setRouteName(route.name || route.title || '');
+      setRouteKey(route.route_key || route.routeCode || '');
+      setStartTime(route.start_time || route.startTime || '08:00 AM');
+      setEndTime(route.end_time || route.endTime || '09:15 AM');
+      
+      // Map stops from either format to StopItem format
+      if (route.stops && route.stops.length > 0) {
+        const mappedStops = route.stops.map(stop => ({
+          id: stop.id,
+          name: stop.name,
+          address: stop.address || '',
+          lat: stop.lat !== undefined ? stop.lat : stop.latitude || null,
+          lng: stop.lng !== undefined ? stop.lng : stop.longitude || null,
+          eta: stop.eta || '',
+        }));
+        setStops(mappedStops);
+      }
+      
+      setEstimatedDuration(route.estimated_duration || route.estimatedDuration || 0);
+      setSelectedDriver(route.assigned_driver_id || route.assignedDriverId || '');
       
       // Load schedule if available
       if (route.schedule) {
@@ -101,6 +114,11 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
     if (Platform.OS === 'web' && visible) {
       const style = document.createElement('style');
       style.textContent = `
+        /* Make sure modals have a lower z-index than the date picker */
+        .modalView {
+          z-index: 10 !important;
+        }
+        
         .input-container:hover {
           background-color: #E2E4E8 !important;
         }
@@ -140,10 +158,10 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
         }
         
         /* Button hover effects */
-        .updateButton {
+        .saveButton {
           transition: all 0.2s ease !important;
         }
-        .updateButton:hover:not(:disabled) {
+        .saveButton:hover:not(:disabled) {
           background-color: #2341CE !important;
           transform: translateY(-1px) !important;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
@@ -163,8 +181,6 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        
-        ${webDatepickerStyles}
       `;
       document.head.appendChild(style);
       
@@ -230,9 +246,15 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
       newStops[index] = newStops[index - 1];
       newStops[index - 1] = temp;
       
+      // After reordering, recalculate ETAs
+      if (startTime) {
+        const { updatedStops } = calculateRouteTimings(newStops, startTime);
+        return updatedStops;
+      }
+      
       return newStops;
     });
-  }, []);
+  }, [startTime]);
   
   // Move stop down in order
   const moveStopDown = useCallback((id: string) => {
@@ -245,9 +267,15 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
       newStops[index] = newStops[index + 1];
       newStops[index + 1] = temp;
       
+      // After reordering, recalculate ETAs
+      if (startTime) {
+        const { updatedStops } = calculateRouteTimings(newStops, startTime);
+        return updatedStops;
+      }
+      
       return newStops;
     });
-  }, []);
+  }, [startTime]);
   
   // Edit stop fields
   const editStop = useCallback((id: string, field: 'name' | 'address', value: string) => {
@@ -278,14 +306,27 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
   // Reset form state
   const resetForm = () => {
     if (route) {
-      // Reset to initial route data
-      setRouteName(route.name);
-      setRouteKey(route.routeKey);
-      setStartTime(route.startTime);
-      setEndTime(route.endTime);
-      setStops(route.stops);
-      setEstimatedDuration(route.estimatedDuration || 0);
-      setSelectedDriver(route.assignedDriverId || '');
+      // Reset to initial route data using the same mapping logic as above
+      setRouteName(route.name || route.title || '');
+      setRouteKey(route.route_key || route.routeCode || '');
+      setStartTime(route.start_time || route.startTime || '08:00 AM');
+      setEndTime(route.end_time || route.endTime || '09:15 AM');
+      
+      // Map stops from either format to StopItem format
+      if (route.stops && route.stops.length > 0) {
+        const mappedStops = route.stops.map(stop => ({
+          id: stop.id,
+          name: stop.name,
+          address: stop.address || '',
+          lat: stop.lat !== undefined ? stop.lat : stop.latitude || null,
+          lng: stop.lng !== undefined ? stop.lng : stop.longitude || null,
+          eta: stop.eta || '',
+        }));
+        setStops(mappedStops);
+      }
+      
+      setEstimatedDuration(route.estimated_duration || route.estimatedDuration || 0);
+      setSelectedDriver(route.assigned_driver_id || route.assignedDriverId || '');
       
       // Reset schedule
       if (route.schedule) {
@@ -351,13 +392,30 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
     
     // Create route data object including schedule
     const routeData: RouteData = {
+      // Preserve original ID if it exists
+      id: route?.id,
+      // Use both old and new property names for compatibility
       name: routeName,
-      routeKey: routeKey,
-      startTime: startTime,
-      endTime: endTime || calculatedEndTime,
-      stops: stops,
-      estimatedDuration: estimatedDuration,
-      assignedDriverId: selectedDriver,
+      title: routeName, // For backward compatibility
+      route_key: routeKey,
+      routeCode: routeKey, // For backward compatibility
+      start_time: startTime,
+      startTime: startTime, // For backward compatibility
+      end_time: endTime || calculatedEndTime,
+      endTime: endTime || calculatedEndTime, // For backward compatibility
+      stops: stops.map(stop => ({
+        ...stop,
+        latitude: stop.lat || 0,
+        longitude: stop.lng || 0,
+        order: 0, // Will be set on server
+        status: true,
+      })),
+      stops_count: stops.length,
+      stopsCount: stops.length, // For backward compatibility
+      estimated_duration: estimatedDuration,
+      estimatedDuration: estimatedDuration, // For backward compatibility
+      assigned_driver_id: selectedDriver,
+      assignedDriverId: selectedDriver, // For backward compatibility
       schedule: schedule // Include schedule data
     };
     
@@ -516,7 +574,7 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
               style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
               onPress={handleUpdate}
               disabled={isSaving}
-              className="updateButton"
+              className="saveButton"
             >
               {isSaving ? (
                 <View style={styles.savingContainer}>

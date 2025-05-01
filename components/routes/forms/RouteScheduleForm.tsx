@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { Calendar, AlertCircle, Plus, X } from 'lucide-react';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { View, TouchableOpacity, TextInput, StyleSheet, Alert } from 'react-native';
+import { Calendar, Plus, X } from 'lucide-react';
 
 import { ThemedText } from '@/components/ThemedText';
 import styles, { webFocusReset } from '@/styles/RouteModalStyles';
@@ -42,6 +41,44 @@ interface RouteScheduleFormProps {
   setFieldErrors: (errors: any) => void;
 }
 
+// Date format to use for display
+const DATE_FORMAT = 'MM/DD/YYYY';
+
+// Format date for display
+const formatDate = (date: Date): string => {
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+};
+
+// Parse a date string in MM/DD/YYYY format
+const parseDate = (dateString: string): Date | null => {
+  const regex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+  const match = dateString.match(regex);
+  
+  if (match) {
+    const month = parseInt(match[1]) - 1; // Month is 0-indexed
+    const day = parseInt(match[2]);
+    const year = parseInt(match[3]);
+    
+    if (!isNaN(month) && !isNaN(day) && !isNaN(year) && 
+        month >= 0 && month < 12 && 
+        day >= 1 && day <= 31) {
+      return new Date(year, month, day);
+    }
+  }
+  
+  return null;
+};
+
+// Check if a date is today or in the future
+const isDateTodayOrFuture = (date: Date): boolean => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date >= today;
+};
+
 /**
  * Route schedule form component
  * Handles selection of operating days, effective dates, and exceptions
@@ -52,16 +89,17 @@ const RouteScheduleForm = ({
   fieldErrors,
   setFieldErrors
 }: RouteScheduleFormProps) => {
-  // Local state for date pickers and new exception
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [showExceptionDatePicker, setShowExceptionDatePicker] = useState(false);
-  
+  // State for new exception
   const [newException, setNewException] = useState<ScheduleException>({
     date: new Date(),
     type: 'no_service',
     reason: ''
   });
+  
+  // State for date fields text
+  const [startDateText, setStartDateText] = useState(formatDate(schedule.effectiveDates.startDate));
+  const [endDateText, setEndDateText] = useState(schedule.effectiveDates.endDate ? formatDate(schedule.effectiveDates.endDate) : '');
+  const [exceptionDateText, setExceptionDateText] = useState(formatDate(newException.date));
   
   // Toggle a day in the operating days array
   const toggleDay = (day: number) => {
@@ -90,16 +128,24 @@ const RouteScheduleForm = ({
     }
   };
   
-  // Handle date changes
-  const handleStartDateChange = (event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(false);
-    if (selectedDate) {
+  // Validate and update start date
+  const handleStartDateChange = (text: string) => {
+    setStartDateText(text);
+    
+    const date = parseDate(text);
+    if (date) {
+      // Valid date format, update state
+      const newEffectiveDates = { ...schedule.effectiveDates, startDate: date };
+      
+      // If end date exists and is before the new start date, clear it
+      if (newEffectiveDates.endDate && date > newEffectiveDates.endDate) {
+        newEffectiveDates.endDate = undefined;
+        setEndDateText('');
+      }
+      
       setSchedule({
         ...schedule,
-        effectiveDates: {
-          ...schedule.effectiveDates,
-          startDate: selectedDate
-        }
+        effectiveDates: newEffectiveDates
       });
       
       // Clear error
@@ -109,40 +155,109 @@ const RouteScheduleForm = ({
     }
   };
   
-  const handleEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(false);
-    setSchedule({
-      ...schedule,
-      effectiveDates: {
-        ...schedule.effectiveDates,
-        endDate: selectedDate
+  // Validate and update end date
+  const handleEndDateChange = (text: string) => {
+    setEndDateText(text);
+    
+    if (text === '') {
+      // Clear end date
+      setSchedule({
+        ...schedule,
+        effectiveDates: {
+          ...schedule.effectiveDates,
+          endDate: undefined
+        }
+      });
+      return;
+    }
+    
+    const date = parseDate(text);
+    if (date) {
+      // Validate that end date is not before start date
+      if (date < schedule.effectiveDates.startDate) {
+        Alert.alert('Invalid Date', 'End date cannot be before start date');
+        return;
       }
-    });
-  };
-  
-  const handleExceptionDateChange = (event: any, selectedDate?: Date) => {
-    setShowExceptionDatePicker(false);
-    if (selectedDate) {
-      setNewException({
-        ...newException,
-        date: selectedDate
+      
+      // Validate that end date is today or in the future
+      if (!isDateTodayOrFuture(date)) {
+        Alert.alert('Invalid Date', 'End date must be today or in the future');
+        return;
+      }
+      
+      // Valid date format and validation passed, update state
+      setSchedule({
+        ...schedule,
+        effectiveDates: {
+          ...schedule.effectiveDates,
+          endDate: date
+        }
       });
     }
   };
   
+  // Validate and update exception date
+  const handleExceptionDateChange = (text: string) => {
+    setExceptionDateText(text);
+    
+    const date = parseDate(text);
+    if (date) {
+      // Valid date format, update state
+      setNewException({
+        ...newException,
+        date: date
+      });
+    }
+  };
+  
+  const handleClearEndDate = () => {
+    setEndDateText('');
+    setSchedule({
+      ...schedule,
+      effectiveDates: {
+        ...schedule.effectiveDates,
+        endDate: undefined
+      }
+    });
+  };
+  
+  // Set end date to 30 days after start date
+  const setDefaultEndDate = () => {
+    const startDate = new Date(schedule.effectiveDates.startDate);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 30);
+    
+    setEndDateText(formatDate(endDate));
+    setSchedule({
+      ...schedule,
+      effectiveDates: {
+        ...schedule.effectiveDates,
+        endDate: endDate
+      }
+    });
+  };
+  
   // Add an exception
   const addException = () => {
+    // Validate exception date
+    if (!parseDate(exceptionDateText)) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in MM/DD/YYYY format');
+      return;
+    }
+    
     setSchedule({
       ...schedule,
       exceptions: [...schedule.exceptions, {...newException}]
     });
     
     // Reset the new exception form
+    const resetDate = new Date();
     setNewException({
-      date: new Date(),
+      date: resetDate,
       type: 'no_service',
       reason: ''
     });
+    setExceptionDateText(formatDate(resetDate));
   };
   
   // Remove an exception
@@ -154,63 +269,6 @@ const RouteScheduleForm = ({
       ...schedule,
       exceptions: newExceptions
     });
-  };
-  
-  // Format date for display
-  const formatDate = (date: Date): string => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  // Render custom date picker for web
-  const renderWebDatePicker = (value: Date, onChange: (date: Date) => void, label: string) => {
-    if (typeof document === 'undefined') return null;
-    
-    return (
-      <div style={{
-        backgroundColor: '#F3F4F6',
-        border: '1px solid #E5E7EB',
-        borderRadius: '8px',
-        padding: '8px 12px',
-        display: 'flex',
-        alignItems: 'center',
-        cursor: 'pointer',
-        width: '100%',
-        boxSizing: 'border-box'
-      }} 
-      onClick={() => {
-        const datePicker = document.createElement('input');
-        datePicker.type = 'date';
-        datePicker.style.position = 'absolute';
-        datePicker.style.visibility = 'hidden';
-        
-        // Set the current value
-        const year = value.getFullYear();
-        const month = String(value.getMonth() + 1).padStart(2, '0');
-        const day = String(value.getDate()).padStart(2, '0');
-        datePicker.value = `${year}-${month}-${day}`;
-        
-        // Add event listener
-        datePicker.addEventListener('change', () => {
-          const newDate = new Date(datePicker.value);
-          onChange(newDate);
-          document.body.removeChild(datePicker);
-        });
-        
-        // Add to body and trigger click
-        document.body.appendChild(datePicker);
-        datePicker.click();
-      }}>
-        <Calendar size={16} color="#6B7280" style={{ marginRight: 8 }} />
-        <ThemedText style={{ fontSize: 14, color: '#4B5563' }}>
-          {formatDate(value)}
-        </ThemedText>
-      </div>
-    );
   };
 
   return (
@@ -228,16 +286,14 @@ const RouteScheduleForm = ({
           )}
         </View>
         
-        <View style={[
-          scheduleStyles.daysContainer,
-          fieldErrors.operatingDays && styles.inputError
-        ]}>
+        <View style={scheduleStyles.daysContainer}>
           {DAYS_OF_WEEK.map((day) => (
             <TouchableOpacity
               key={day.value}
               style={[
                 scheduleStyles.dayButton,
-                schedule.operatingDays.includes(day.value) && scheduleStyles.dayButtonActive
+                schedule.operatingDays.includes(day.value) && scheduleStyles.dayButtonActive,
+                fieldErrors.operatingDays && scheduleStyles.dayButtonError
               ]}
               onPress={() => toggleDay(day.value)}
             >
@@ -267,45 +323,25 @@ const RouteScheduleForm = ({
           {/* Start Date */}
           <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
             <ThemedText style={scheduleStyles.dateLabel}>Start Date</ThemedText>
-            {typeof window === 'undefined' ? (
-              // For native platforms
-              <>
-                <TouchableOpacity
-                  style={[
-                    scheduleStyles.datePickerButton,
-                    fieldErrors.effectiveDates && styles.inputError
-                  ]}
-                  onPress={() => setShowStartDatePicker(true)}
-                >
-                  <Calendar size={16} color="#6B7280" style={{ marginRight: 8 }} />
-                  <ThemedText style={scheduleStyles.dateText}>
-                    {formatDate(schedule.effectiveDates.startDate)}
-                  </ThemedText>
-                </TouchableOpacity>
-                
-                {showStartDatePicker && (
-                  <DateTimePicker
-                    value={schedule.effectiveDates.startDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleStartDateChange}
-                  />
-                )}
-              </>
-            ) : (
-              // For web
-              renderWebDatePicker(
-                schedule.effectiveDates.startDate,
-                (date) => setSchedule({
-                  ...schedule,
-                  effectiveDates: {
-                    ...schedule.effectiveDates,
-                    startDate: date
-                  }
-                }),
-                'Start Date'
-              )
-            )}
+            
+            <View style={[styles.timeInputContainer, { overflow: 'hidden' }]}>
+              <Calendar size={16} color="#6B7280" style={styles.timeIcon} />
+              <TextInput
+                style={[
+                  styles.timeInput,
+                  { flex: 1, padding: 8 },
+                  webFocusReset
+                ]}
+                value={startDateText}
+                onChangeText={handleStartDateChange}
+                placeholder="MM/DD/YYYY"
+                placeholderTextColor="#9CA3AF"
+                selectionColor="#4361ee"
+              />
+            </View>
+            <ThemedText style={scheduleStyles.dateHelpText}>
+              Enter date in MM/DD/YYYY format
+            </ThemedText>
           </View>
           
           {/* End Date (Optional) */}
@@ -315,76 +351,42 @@ const RouteScheduleForm = ({
               <ThemedText style={scheduleStyles.optionalLabel}>(Optional)</ThemedText>
             </View>
             
-            {typeof window === 'undefined' ? (
-              // For native platforms
-              <>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[styles.timeInputContainer, { flex: 1, overflow: 'hidden' }]}>
+                <Calendar size={16} color="#6B7280" style={styles.timeIcon} />
+                <TextInput
+                  style={[
+                    styles.timeInput,
+                    { flex: 1, padding: 8 },
+                    webFocusReset
+                  ]}
+                  value={endDateText}
+                  onChangeText={handleEndDateChange}
+                  placeholder="MM/DD/YYYY"
+                  placeholderTextColor="#9CA3AF"
+                  selectionColor="#4361ee"
+                />
+              </View>
+              
+              {endDateText ? (
                 <TouchableOpacity
-                  style={scheduleStyles.datePickerButton}
-                  onPress={() => setShowEndDatePicker(true)}
+                  style={scheduleStyles.clearDateButton}
+                  onPress={handleClearEndDate}
                 >
-                  <Calendar size={16} color="#6B7280" style={{ marginRight: 8 }} />
-                  <ThemedText style={scheduleStyles.dateText}>
-                    {schedule.effectiveDates.endDate 
-                      ? formatDate(schedule.effectiveDates.endDate)
-                      : 'No end date'}
-                  </ThemedText>
+                  <X size={14} color="#6B7280" />
                 </TouchableOpacity>
-                
-                {showEndDatePicker && (
-                  <DateTimePicker
-                    value={schedule.effectiveDates.endDate || new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={handleEndDateChange}
-                  />
-                )}
-              </>
-            ) : (
-              // For web
-              schedule.effectiveDates.endDate ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {renderWebDatePicker(
-                    schedule.effectiveDates.endDate,
-                    (date) => setSchedule({
-                      ...schedule,
-                      effectiveDates: {
-                        ...schedule.effectiveDates,
-                        endDate: date
-                      }
-                    }),
-                    'End Date'
-                  )}
-                  <TouchableOpacity
-                    style={scheduleStyles.clearDateButton}
-                    onPress={() => setSchedule({
-                      ...schedule,
-                      effectiveDates: {
-                        ...schedule.effectiveDates,
-                        endDate: undefined
-                      }
-                    })}
-                  >
-                    <X size={14} color="#6B7280" />
-                  </TouchableOpacity>
-                </View>
               ) : (
                 <TouchableOpacity
-                  style={scheduleStyles.datePickerButton}
-                  onPress={() => setSchedule({
-                    ...schedule,
-                    effectiveDates: {
-                      ...schedule.effectiveDates,
-                      endDate: new Date()
-                    }
-                  })}
+                  style={scheduleStyles.setDefaultDateButton}
+                  onPress={setDefaultEndDate}
                 >
-                  <Calendar size={16} color="#6B7280" style={{ marginRight: 8 }} />
-                  <ThemedText style={scheduleStyles.dateText}>
-                    No end date (click to set)
-                  </ThemedText>
+                  <Plus size={14} color="#6B7280" />
                 </TouchableOpacity>
-              )
-            )}
+              )}
+            </View>
+            <ThemedText style={scheduleStyles.dateHelpText}>
+              Must be today or future date
+            </ThemedText>
           </View>
         </View>
       </View>
@@ -400,77 +402,66 @@ const RouteScheduleForm = ({
             <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
               <ThemedText style={scheduleStyles.dateLabel}>Date</ThemedText>
               
-              {typeof window === 'undefined' ? (
-                // For native platforms
-                <>
-                  <TouchableOpacity
-                    style={scheduleStyles.datePickerButton}
-                    onPress={() => setShowExceptionDatePicker(true)}
-                  >
-                    <Calendar size={16} color="#6B7280" style={{ marginRight: 8 }} />
-                    <ThemedText style={scheduleStyles.dateText}>
-                      {formatDate(newException.date)}
-                    </ThemedText>
-                  </TouchableOpacity>
-                  
-                  {showExceptionDatePicker && (
-                    <DateTimePicker
-                      value={newException.date}
-                      mode="date"
-                      display="default"
-                      onChange={handleExceptionDateChange}
-                    />
-                  )}
-                </>
-              ) : (
-                // For web
-                renderWebDatePicker(
-                  newException.date,
-                  (date) => setNewException({...newException, date}),
-                  'Exception Date'
-                )
-              )}
+              <View style={[styles.timeInputContainer, { overflow: 'hidden' }]}>
+                <Calendar size={16} color="#6B7280" style={styles.timeIcon} />
+                <TextInput
+                  style={[
+                    styles.timeInput,
+                    { flex: 1, padding: 8 },
+                    webFocusReset
+                  ]}
+                  value={exceptionDateText}
+                  onChangeText={handleExceptionDateChange}
+                  placeholder="MM/DD/YYYY"
+                  placeholderTextColor="#9CA3AF"
+                  selectionColor="#4361ee"
+                />
+              </View>
             </View>
             
             {/* Exception Type */}
             <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
               <ThemedText style={scheduleStyles.dateLabel}>Type</ThemedText>
-              <View style={styles.selectContainer}>
-                <select
-                  className="select-exception-type"
-                  style={{
-                    width: '100%',
-                    height: '38px',
-                    padding: '0 12px',
-                    backgroundColor: '#F3F4F6',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px',
-                    color: '#4B5563',
-                    fontSize: '14px',
-                    outline: 'none',
-                    appearance: 'none',
-                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' stroke='%236B7280' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                    backgroundSize: '16px',
-                    paddingRight: '32px',
-                    cursor: 'pointer',
-                    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)'
-                  }}
-                  value={newException.type}
-                  onChange={(e) => setNewException({
-                    ...newException, 
-                    type: e.target.value as 'no_service' | 'special_service'
-                  })}
+              
+              <View style={{ flexDirection: 'row' }}>
+                <TouchableOpacity
+                  style={[
+                    scheduleStyles.typeButton,
+                    newException.type === 'no_service' && scheduleStyles.typeButtonActive
+                  ]}
+                  onPress={() => setNewException({...newException, type: 'no_service'})}
                 >
-                  <option value="no_service">No Service</option>
-                  <option value="special_service">Special Service</option>
-                </select>
+                  <ThemedText 
+                    style={[
+                      scheduleStyles.typeButtonText,
+                      newException.type === 'no_service' && scheduleStyles.typeButtonTextActive
+                    ]}
+                  >
+                    No Service
+                  </ThemedText>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    scheduleStyles.typeButton,
+                    scheduleStyles.typeButtonRight,
+                    newException.type === 'special_service' && scheduleStyles.typeButtonActive
+                  ]}
+                  onPress={() => setNewException({...newException, type: 'special_service'})}
+                >
+                  <ThemedText 
+                    style={[
+                      scheduleStyles.typeButtonText,
+                      newException.type === 'special_service' && scheduleStyles.typeButtonTextActive
+                    ]}
+                  >
+                    Special Service
+                  </ThemedText>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
           
-          {/* Reason Field */}
           <View style={styles.formGroup}>
             <View style={styles.formLabelContainer}>
               <ThemedText style={scheduleStyles.dateLabel}>Reason</ThemedText>
@@ -507,45 +498,41 @@ const RouteScheduleForm = ({
           </TouchableOpacity>
         </View>
         
-        {/* List of exceptions */}
-        {schedule.exceptions.length > 0 ? (
+        {/* Exceptions List */}
+        {schedule.exceptions.length > 0 && (
           <View style={scheduleStyles.exceptionsList}>
-            <ThemedText style={scheduleStyles.exceptionsHeader}>Saved Exceptions:</ThemedText>
+            <ThemedText style={scheduleStyles.exceptionsHeader}>
+              Added Exceptions:
+            </ThemedText>
+            
             {schedule.exceptions.map((exception, index) => (
               <View key={index} style={scheduleStyles.exceptionItem}>
-                <View style={scheduleStyles.exceptionInfo}>
-                  <View style={[
-                    scheduleStyles.exceptionBadge,
-                    exception.type === 'no_service' ? scheduleStyles.noServiceBadge : scheduleStyles.specialServiceBadge
-                  ]}>
-                    <ThemedText style={scheduleStyles.exceptionBadgeText}>
+                <View style={scheduleStyles.exceptionDetails}>
+                  <View style={scheduleStyles.exceptionDate}>
+                    <Calendar size={14} color="#4B5563" style={{ marginRight: 4 }} />
+                    <ThemedText style={scheduleStyles.exceptionText}>
+                      {formatDate(exception.date)}
+                    </ThemedText>
+                  </View>
+                  <View style={scheduleStyles.exceptionTag}>
+                    <ThemedText style={scheduleStyles.exceptionTagText}>
                       {exception.type === 'no_service' ? 'No Service' : 'Special Service'}
                     </ThemedText>
                   </View>
-                  <ThemedText style={scheduleStyles.exceptionDate}>
-                    {formatDate(exception.date)}
-                  </ThemedText>
                   {exception.reason && (
                     <ThemedText style={scheduleStyles.exceptionReason}>
-                      Reason: {exception.reason}
+                      {exception.reason}
                     </ThemedText>
                   )}
                 </View>
                 <TouchableOpacity 
-                  style={scheduleStyles.removeExceptionButton}
+                  style={scheduleStyles.removeButton}
                   onPress={() => removeException(index)}
                 >
-                  <X size={16} color="#EF4444" />
+                  <X size={14} color="#6B7280" />
                 </TouchableOpacity>
               </View>
             ))}
-          </View>
-        ) : (
-          <View style={scheduleStyles.noExceptionsMessage}>
-            <ThemedText style={scheduleStyles.noExceptionsText}>
-              No exceptions added. Use the form above to add dates when the route won't run,
-              or days when it will have special service.
-            </ThemedText>
           </View>
         )}
       </View>
@@ -584,6 +571,9 @@ const scheduleStyles = StyleSheet.create({
     backgroundColor: '#4361ee',
     borderColor: '#3050ee',
   },
+  dayButtonError: {
+    borderColor: '#EF4444',
+  },
   dayText: {
     fontSize: 14,
     fontWeight: '500',
@@ -597,15 +587,19 @@ const scheduleStyles = StyleSheet.create({
     color: '#4B5563',
     marginBottom: 6,
   },
-  datePickerButton: {
+  dateHelpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  setDefaultDateButton: {
+    padding: 8,
+    marginLeft: 8,
     backgroundColor: '#F3F4F6',
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   dateText: {
     fontSize: 14,
@@ -627,6 +621,36 @@ const scheduleStyles = StyleSheet.create({
     padding: 12,
     marginTop: 8,
     backgroundColor: '#F9FAFB',
+  },
+  typeButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    alignItems: 'center',
+  },
+  typeButtonRight: {
+    borderLeftWidth: 0,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+  },
+  typeButtonActive: {
+    backgroundColor: '#4361ee',
+    borderColor: '#3050ee',
+  },
+  typeButtonText: {
+    fontSize: 13,
+    color: '#4B5563',
+    textAlign: 'center',
+  },
+  typeButtonTextActive: {
+    color: 'white',
   },
   addExceptionButton: {
     backgroundColor: '#4361ee',
@@ -653,63 +677,49 @@ const scheduleStyles = StyleSheet.create({
     marginBottom: 8,
   },
   exceptionItem: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
   },
-  exceptionInfo: {
+  exceptionDetails: {
     flex: 1,
   },
-  exceptionBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
-  },
-  noServiceBadge: {
-    backgroundColor: '#FEE2E2',
-  },
-  specialServiceBadge: {
-    backgroundColor: '#DBEAFE',
-  },
-  exceptionBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
   exceptionDate: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
   },
-  exceptionReason: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  removeExceptionButton: {
-    padding: 8,
-  },
-  noExceptionsMessage: {
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  noExceptionsText: {
+  exceptionText: {
     fontSize: 14,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  exceptionTag: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  exceptionTagText: {
+    fontSize: 12,
+    color: '#4B5563',
+  },
+  exceptionReason: {
+    fontSize: 13,
     color: '#6B7280',
     fontStyle: 'italic',
-    textAlign: 'center',
-  }
+  },
+  removeButton: {
+    padding: 6,
+  },
 });
 
-export { type RouteSchedule, type ScheduleException };
 export default RouteScheduleForm;

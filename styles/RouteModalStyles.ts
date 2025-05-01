@@ -20,6 +20,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     position: 'relative',
+    zIndex: 1000,
   },
   modalView: {
     width: Platform.OS === 'web' ? Math.min(1100, windowWidth - 40) : windowWidth - 40,
@@ -36,6 +37,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     position: 'relative',
+    zIndex: 1000,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -44,6 +46,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     padding: 16,
+    zIndex: 1000,
   },
   modalTitle: {
     fontSize: 20,
@@ -139,11 +142,42 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     boxSizing: 'border-box',
     height: '100%',
-    outline: 'none',
     borderWidth: 0,
     borderColor: 'transparent',
   },
   
+  // Day selection styles
+  daysContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  dayButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dayButtonActive: {
+    backgroundColor: '#4361ee',
+    borderColor: '#3050ee',
+  },
+  dayButtonError: {
+    borderColor: '#EF4444',
+  },
+  dayButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4B5563',
+  },
+  dayButtonTextActive: {
+    color: 'white',
+  },
+
   // Time input styles
   timeInputContainer: {
     backgroundColor: '#E5E7EB',
@@ -169,7 +203,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     boxSizing: 'border-box',
     height: '100%',
-    outline: 'none',
     borderWidth: 0,
     borderColor: 'transparent',
   },
@@ -396,13 +429,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   searchInput: {
-    flex: 1,
-    color: '#1F2937',
-    fontSize: 14,
-    padding: 0,
     height: '100%',
     width: '100%',
-    outline: 'none',
     borderWidth: 0,
     borderColor: 'transparent',
   },
@@ -439,23 +467,37 @@ const styles = StyleSheet.create({
   
   // Stop item styles
   stopItem: {
-    position: 'relative',
-    backgroundColor: 'white',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 8,
-    padding: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    elevation: 1,
-    width: '100%',
-    maxWidth: '100%',
-    boxSizing: 'border-box',
+    elevation: 2,
+  },
+  stopItemActive: {
+    backgroundColor: '#F3F4F6',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  dragHandle: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  dragLine: {
+    width: 16,
+    height: 2,
+    backgroundColor: '#9CA3AF',
+    marginVertical: 1,
+    borderRadius: 1,
   },
   stopNumber: {
     width: 24,
@@ -475,6 +517,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   },
   stopContent: {
     flex: 1,
@@ -484,29 +527,63 @@ const styles = StyleSheet.create({
   stopInfo: {
     flex: 1,
   },
-  stopNameContainer: {
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginBottom: 4,
-    alignSelf: 'flex-start',
-  },
   stopName: {
     fontSize: 14,
     fontWeight: '500',
     color: '#1F2937',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   },
   stopAddress: {
     fontSize: 12,
     color: '#6B7280',
     marginTop: 2,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   },
-  stopEta: {
+  etaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  etaText: {
     fontSize: 12,
-    color: '#4361ee',
-    marginTop: 4,
-    fontWeight: '500',
+    color: '#6B7280',
+    marginLeft: 4,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  },
+  stopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+    marginRight: 8,
+  },
+  editButtonText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  },
+  deleteButton: {
+    padding: 4,
+  },
+  emptyStops: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+  },
+  emptyStopsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  section: {
+    marginBottom: 16,
   },
   
   // Stop editing form
@@ -570,10 +647,6 @@ const styles = StyleSheet.create({
   },
   
   // Reordering controls
-  stopActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   arrowButtons: {
     flexDirection: 'column',
     marginRight: 8,
@@ -702,6 +775,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#4361ee',
+  },
+  
+  // Exceptions styles
+  exceptionsContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+  },
+  exceptionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  exceptionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  addExceptionButton: {
+    backgroundColor: '#4361ee',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  addExceptionText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  exceptionsList: {
+    marginTop: 8,
+  },
+  exceptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  exceptionDateContainer: {
+    width: 100,
+    marginRight: 8,
+  },
+  exceptionDate: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  exceptionReasonContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  exceptionReasonInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    borderWidth: 0,
+    padding: 6,
+    fontSize: 12,
+    color: '#1F2937',
+  },
+  deleteExceptionButton: {
+    padding: 4,
+  },
+  noExceptions: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  noExceptionsText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
 });
 

@@ -8,6 +8,15 @@ export interface StopItem {
   lat: number | null;
   lng: number | null;
   eta?: string; // Estimated time of arrival
+  // Fields for backward compatibility with TransportTypes
+  latitude?: number;
+  longitude?: number;
+  order?: number;
+  status?: boolean;
+  routeId?: string;
+  created_by?: string;
+  created_at?: string;
+  soft_delete?: boolean;
 }
 
 // Driver interface
@@ -44,14 +53,43 @@ export interface RouteSchedule {
 
 // Route data interface
 export interface RouteData {
-  name: string;
-  routeKey: string;
-  startTime: string;
-  endTime: string;
-  stops: StopItem[];
-  estimatedDuration?: number; // in minutes
+  id?: string;
+  // Compatibility with old names
+  routeCode?: string;
+  title?: string;
+  // New names from TransportTypes
+  route_key?: string;
+  name?: string;
+  description?: string;
+  // Common fields
+  interval?: number;
+  stopsCount?: number;
+  stops_count?: number;
+  active?: boolean;
+  // School reference
+  schoolId?: string;
+  school_id?: string;
+  // Driver reference
   assignedDriverId?: string;
-  schedule?: RouteSchedule; // Add schedule data
+  assigned_driver_id?: string;
+  // Time fields
+  startTime?: string;
+  start_time?: string;
+  endTime?: string;
+  end_time?: string;
+  estimatedDuration?: number;
+  estimated_duration?: number;
+  // Metadata
+  created_by?: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
+  deleted_by?: string;
+  deleted_at?: string;
+  soft_delete?: boolean;
+  // Sub collections
+  stops?: StopItem[];
+  schedule?: RouteSchedule;
 }
 
 // Field errors interface

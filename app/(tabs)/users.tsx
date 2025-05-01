@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
+import UserModal from '@/components/modals/UserModal';
+import { sendPasswordResetEmail } from '@/utils/auth';
 
 // Define interface for User based on Firestore structure
 interface User {
@@ -68,9 +70,10 @@ export default function UsersScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [actionMenuVisible, setActionMenuVisible] = useState(false);
-  const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
   const [filterType, setFilterType] = useState<'all' | 'parent' | 'student'>('all');
+  
+  // New state for the modal
+  const [isModalVisible, setIsModalVisible] = useState(false);
   
   // Animation for content fade-in
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -126,57 +129,56 @@ export default function UsersScreen() {
     setFilteredUsers(filtered);
   }, [searchQuery, users, filterType]);
 
-  // Action menu handlers
-  const showActionMenu = (user: User, event: any) => {
+  // Open modal for editing a user
+  const handleEditUser = (user: User) => {
     setSelectedUser(user);
-    // In a real implementation, get the touch coordinates
-    // For now, we'll use mock coordinates
-    setActionMenuPosition({ x: 100, y: 100 });
-    setActionMenuVisible(true);
+    setIsModalVisible(true);
   };
 
-  const hideActionMenu = () => {
-    setActionMenuVisible(false);
+  // Open modal for adding a new user
+  const handleAddNewUser = () => {
     setSelectedUser(null);
+    setIsModalVisible(true);
+  };
+
+  // Save user changes
+  const handleSaveUser = (updatedUser: User) => {
+    if (updatedUser.id.startsWith('user_')) {
+      // New user
+      setUsers([...users, updatedUser]);
+      Alert.alert('Success', 'User has been added');
+    } else {
+      // Update existing user
+      const updatedUsers = users.map(u => 
+        u.id === updatedUser.id ? updatedUser : u
+      );
+      setUsers(updatedUsers);
+      Alert.alert('Success', 'User information has been updated');
+    }
+  };
+
+  // Delete user
+  const handleDeleteUser = (user: User) => {
+    const updatedUsers = users.filter(u => u.id !== user.id);
+    setUsers(updatedUsers);
+    Alert.alert('Success', 'User has been deleted');
+  };
+
+  // Handle password reset
+  const handleSendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(email);
+      Alert.alert('Success', `Password reset email sent to ${email}`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send password reset email');
+      console.error('Error sending password reset:', error);
+    }
   };
 
   // Get route name by ID
   const getRouteName = (routeId: string) => {
     const route = routes.find(r => r.id === routeId);
     return route ? route.name : 'Unknown';
-  };
-
-  const handleEditUser = (user: User) => {
-    hideActionMenu();
-    Alert.alert('Edit User', `Edit ${user.name}'s information`);
-    // In a real implementation, navigate to edit form
-  };
-
-  const handleDeleteUser = (user: User) => {
-    hideActionMenu();
-    Alert.alert(
-      'Delete User',
-      `Are you sure you want to delete ${user.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => {
-            // In a real implementation, delete from Firebase
-            const updatedUsers = users.filter(u => u.id !== user.id);
-            setUsers(updatedUsers);
-            setFilteredUsers(updatedUsers);
-            Alert.alert('Success', 'User has been deleted');
-          }
-        }
-      ]
-    );
-  };
-
-  const handleAddNewUser = () => {
-    Alert.alert('Add User', 'Navigate to add user form');
-    // In a real implementation, navigate to add form
   };
 
   // Toggle filter type
@@ -203,7 +205,6 @@ export default function UsersScreen() {
               </ThemedText>
             </View>
           </View>
-          
           <View style={styles.contactInfo}>
             <View style={styles.contactItem}>
               <Mail size={14} color="#6B7280" />
@@ -214,38 +215,22 @@ export default function UsersScreen() {
               <ThemedText style={styles.contactText}>{item.phone}</ThemedText>
             </View>
           </View>
-          
           {item.viewable_routes.length > 0 && (
-            <View style={styles.routeSection}>
+            <View style={styles.routeInfo}>
               <MapPin size={14} color="#6B7280" />
               <ThemedText style={styles.routeText}>
-                Assigned to: {item.viewable_routes.map(rid => getRouteName(rid)).join(', ')}
+                {item.viewable_routes.map(routeId => getRouteName(routeId)).join(', ')}
               </ThemedText>
             </View>
           )}
         </View>
       </View>
-      
       <TouchableOpacity 
         style={styles.actionButton} 
-        onPress={(e) => showActionMenu(item, e)}
+        onPress={() => handleEditUser(item)}
       >
-        <MoreVertical size={20} color="#6B7280" />
+        <Edit size={18} color="#6B7280" />
       </TouchableOpacity>
-      
-      {/* Action Menu */}
-      {actionMenuVisible && selectedUser?.id === item.id && (
-        <View style={[styles.actionMenu, { top: actionMenuPosition.y, left: actionMenuPosition.x }]}>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleEditUser(item)}>
-            <Edit size={16} color="#4B5563" />
-            <ThemedText style={styles.actionMenuText}>Edit</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleDeleteUser(item)}>
-            <Trash2 size={16} color="#EF4444" />
-            <ThemedText style={[styles.actionMenuText, styles.deleteText]}>Delete</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 
@@ -253,11 +238,11 @@ export default function UsersScreen() {
     <View style={styles.mainContent}>
       {/* Page Title */}
       <View style={styles.pageHeader}>
-        <ThemedText style={styles.pageTitle}>Students/Parents</ThemedText>
-        <ThemedText style={styles.schoolName}>{schoolName}</ThemedText>
+        <ThemedText style={styles.pageTitle}>Students & Parents</ThemedText>
+        <ThemedText style={styles.schoolName}>{schoolName || 'NYIT'}</ThemedText>
       </View>
       
-      {/* Search Bar */}
+      {/* Search and Add Bar */}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchContainer}>
           <Search size={20} color="#6B7280" />
@@ -273,54 +258,60 @@ export default function UsersScreen() {
           />
         </View>
         
-        <View style={styles.filterGroup}>
+        {/* Filter Buttons */}
+        <View style={styles.filterContainer}>
           <TouchableOpacity 
             style={[
-              styles.filterTab,
-              filterType === 'all' && styles.filterTabActive
+              styles.filterButton,
+              styles.filterButtonFirst,
+              filterType === 'all' && styles.filterButtonActive
             ]}
             onPress={() => toggleFilterType('all')}
           >
             <ThemedText style={[
-              styles.filterTabText,
-              filterType === 'all' && styles.filterTabTextActive
-            ]}>All</ThemedText>
+              styles.filterButtonText,
+              filterType === 'all' && styles.filterButtonTextActive
+            ]}>
+              All
+            </ThemedText>
           </TouchableOpacity>
-          
           <TouchableOpacity 
             style={[
-              styles.filterTab,
-              filterType === 'parent' && styles.filterTabActive
+              styles.filterButton,
+              filterType === 'parent' && styles.filterButtonActive
             ]}
             onPress={() => toggleFilterType('parent')}
           >
             <ThemedText style={[
-              styles.filterTabText,
-              filterType === 'parent' && styles.filterTabTextActive
-            ]}>Parents</ThemedText>
+              styles.filterButtonText,
+              filterType === 'parent' && styles.filterButtonTextActive
+            ]}>
+              Parents
+            </ThemedText>
           </TouchableOpacity>
-          
           <TouchableOpacity 
             style={[
-              styles.filterTab,
-              filterType === 'student' && styles.filterTabActive
+              styles.filterButton,
+              styles.filterButtonLast,
+              filterType === 'student' && styles.filterButtonActive
             ]}
             onPress={() => toggleFilterType('student')}
           >
             <ThemedText style={[
-              styles.filterTabText,
-              filterType === 'student' && styles.filterTabTextActive
-            ]}>Students</ThemedText>
+              styles.filterButtonText,
+              filterType === 'student' && styles.filterButtonTextActive
+            ]}>
+              Students
+            </ThemedText>
           </TouchableOpacity>
         </View>
-      </View>
-      
-      <View style={styles.actionButtonContainer}>
+        
+        {/* Add User Button */}
         <TouchableOpacity 
           style={styles.addButton}
           onPress={handleAddNewUser}
         >
-          <Plus size={18} color="white" />
+          <Plus size={20} color="#FFFFFF" />
           <ThemedText style={styles.addButtonText}>Add User</ThemedText>
         </TouchableOpacity>
       </View>
@@ -336,6 +327,17 @@ export default function UsersScreen() {
           showsVerticalScrollIndicator={false}
         />
       </Animated.View>
+      
+      {/* User Edit/Add Modal */}
+      <UserModal
+        isVisible={isModalVisible}
+        onClose={() => setIsModalVisible(false)}
+        user={selectedUser}
+        routes={routes}
+        onSave={handleSaveUser}
+        onDelete={handleDeleteUser}
+        onSendPasswordReset={handleSendPasswordReset}
+      />
     </View>
   );
 }
@@ -345,9 +347,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     backgroundColor: '#F8FAFC',
-  },
-  contentContainer: {
-    flex: 1,
   },
   pageHeader: {
     padding: 24,
@@ -366,110 +365,121 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 4,
   },
+  contentContainer: {
+    flex: 1,
+  },
   searchBarContainer: {
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#E5E7EB',
   },
   searchContainer: {
     flex: 1,
-    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingHorizontal: 12,
-    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 40,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
     height: 40,
+    fontSize: 15,
+    color: '#1F2937',
+    marginLeft: 8,
   },
-  filterGroup: {
+  filterContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    height: 36,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    marginLeft: 12,
+    borderRadius: 6,
     overflow: 'hidden',
   },
-  filterTab: {
+  filterButton: {
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRightWidth: 0,
   },
-  filterTabActive: {
+  filterButtonActive: {
     backgroundColor: '#4361ee',
+    borderColor: '#3050ee',
   },
-  filterTabText: {
-    color: '#6B7280',
-    fontSize: 14,
+  filterButtonText: {
+    fontSize: 13,
     fontWeight: '500',
+    color: '#4B5563',
   },
-  filterTabTextActive: {
+  filterButtonTextActive: {
     color: 'white',
   },
-  actionButtonContainer: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+  filterButtonFirst: {
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
+  },
+  filterButtonLast: {
+    borderRightWidth: 1,
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
   },
   addButton: {
-    backgroundColor: '#4361ee',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    backgroundColor: '#4361ee',
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    height: 40,
+    paddingHorizontal: 16,
+    marginLeft: 12,
   },
   addButtonText: {
     color: 'white',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 8,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  listContainer: {
+    padding: 16,
   },
   list: {
     flex: 1,
   },
-  listContainer: {
-    paddingVertical: 8,
-  },
   userCard: {
-    backgroundColor: 'white',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   userInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   userInitials: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: '#4361ee',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   initialsText: {
     color: 'white',
-    fontWeight: 'bold',
     fontSize: 16,
+    fontWeight: 'bold',
   },
   userDetails: {
     flex: 1,
@@ -477,88 +487,54 @@ const styles = StyleSheet.create({
   userHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   userName: {
-    fontWeight: '600',
     fontSize: 16,
-    color: '#1F2937',
+    fontWeight: '600',
+    color: '#111827',
     marginRight: 8,
   },
   userType: {
-    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 16,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  studentType: {
+    backgroundColor: '#FEF3C7',
   },
   parentType: {
     backgroundColor: '#DBEAFE',
   },
-  studentType: {
-    backgroundColor: '#FCE7F3',
-  },
   userTypeText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#1F2937',
+    color: '#4B5563',
   },
   contactInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 8,
+    marginVertical: 4,
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 4,
+    marginVertical: 2,
   },
   contactText: {
     fontSize: 14,
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 6,
   },
-  routeSection: {
+  routeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginTop: 4,
   },
   routeText: {
     fontSize: 14,
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 6,
   },
   actionButton: {
     padding: 8,
-  },
-  actionMenu: {
-    position: 'absolute',
-    right: 16,
-    top: 40,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
-    zIndex: 10,
-  },
-  actionMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    minWidth: 120,
-  },
-  actionMenuText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
-  },
-  deleteText: {
-    color: '#EF4444',
   },
 });

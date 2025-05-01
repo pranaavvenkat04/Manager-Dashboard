@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
+import DriverModal from '@/components/modals/DriverModal';
+import { sendPasswordResetEmail } from '@/utils/auth';
 
 // Define interface for Driver based on Firestore structure
 interface Driver {
@@ -44,8 +46,9 @@ export default function DriversScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
-  const [actionMenuVisible, setActionMenuVisible] = useState(false);
-  const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
+  
+  // New state for the modal
+  const [isModalVisible, setIsModalVisible] = useState(false);
   
   // Animation for content fade-in
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -89,59 +92,60 @@ export default function DriversScreen() {
     }
   }, [searchQuery, drivers]);
 
-  // Action menu handlers
-  const showActionMenu = (driver: Driver, event: any) => {
-    setSelectedDriver(driver);
-    // In a real implementation, get the touch coordinates
-    // For now, we'll use mock coordinates
-    setActionMenuPosition({ x: 100, y: 100 });
-    setActionMenuVisible(true);
-  };
-
-  const hideActionMenu = () => {
-    setActionMenuVisible(false);
-    setSelectedDriver(null);
-  };
-
+  // Open modal for editing a driver
   const handleEditDriver = (driver: Driver) => {
-    hideActionMenu();
-    Alert.alert('Edit Driver', `Edit ${driver.name}'s information`);
-    // In a real implementation, navigate to edit form
+    setSelectedDriver(driver);
+    setIsModalVisible(true);
   };
 
-  const handleDeleteDriver = (driver: Driver) => {
-    hideActionMenu();
-    Alert.alert(
-      'Delete Driver',
-      `Are you sure you want to delete ${driver.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => {
-            // In a real implementation, delete from Firebase
-            const updatedDrivers = drivers.filter(d => d.id !== driver.id);
-            setDrivers(updatedDrivers);
-            setFilteredDrivers(updatedDrivers);
-            Alert.alert('Success', 'Driver has been deleted');
-          }
-        }
-      ]
-    );
-  };
-
+  // Open modal for adding a new driver
   const handleAddNewDriver = () => {
-    Alert.alert('Add Driver', 'Navigate to add driver form');
-    // In a real implementation, navigate to add form
+    setSelectedDriver(null);
+    setIsModalVisible(true);
+  };
+
+  // Save driver changes
+  const handleSaveDriver = (updatedDriver: Driver) => {
+    if (updatedDriver.id.startsWith('driver_')) {
+      // New driver
+      setDrivers([...drivers, updatedDriver]);
+      Alert.alert('Success', 'Driver has been added');
+    } else {
+      // Update existing driver
+      const updatedDrivers = drivers.map(d => 
+        d.id === updatedDriver.id ? updatedDriver : d
+      );
+      setDrivers(updatedDrivers);
+      Alert.alert('Success', 'Driver information has been updated');
+    }
+  };
+
+  // Delete driver
+  const handleDeleteDriver = (driver: Driver) => {
+    const updatedDrivers = drivers.filter(d => d.id !== driver.id);
+    setDrivers(updatedDrivers);
+    Alert.alert('Success', 'Driver has been deleted');
+  };
+
+  // Handle password reset
+  const handleSendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(email);
+      Alert.alert('Success', `Password reset email sent to ${email}`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send password reset email');
+      console.error('Error sending password reset:', error);
+    }
   };
 
   // Render driver item
-  const   renderDriverItem = ({ item }: { item: Driver }) => (
+  const renderDriverItem = ({ item }: { item: Driver }) => (
     <View style={styles.driverCard}>
       <View style={styles.driverInfo}>
         <View style={styles.driverInitials}>
-          <ThemedText style={styles.initialsText}>DR</ThemedText>
+          <ThemedText style={styles.initialsText}>
+            {item.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+          </ThemedText>
         </View>
         <View style={styles.driverDetails}>
           <ThemedText style={styles.driverName}>{item.name}</ThemedText>
@@ -159,24 +163,10 @@ export default function DriversScreen() {
       </View>
       <TouchableOpacity 
         style={styles.actionButton} 
-        onPress={(e) => showActionMenu(item, e)}
+        onPress={() => handleEditDriver(item)}
       >
-        <MoreVertical size={20} color="#6B7280" />
+        <Edit size={18} color="#6B7280" />
       </TouchableOpacity>
-      
-      {/* Action Menu (would be positioned absolutely in a real implementation) */}
-      {actionMenuVisible && selectedDriver?.id === item.id && (
-        <View style={[styles.actionMenu, { top: actionMenuPosition.y, left: actionMenuPosition.x }]}>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleEditDriver(item)}>
-            <Edit size={16} color="#4B5563" />
-            <ThemedText style={styles.actionMenuText}>Edit</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => handleDeleteDriver(item)}>
-            <Trash2 size={16} color="#EF4444" />
-            <ThemedText style={[styles.actionMenuText, styles.deleteText]}>Delete</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 
@@ -185,10 +175,10 @@ export default function DriversScreen() {
       {/* Page Title */}
       <View style={styles.pageHeader}>
         <ThemedText style={styles.pageTitle}>Drivers</ThemedText>
-        <ThemedText style={styles.schoolName}>NYIT</ThemedText>
+        <ThemedText style={styles.schoolName}>{schoolName || 'NYIT'}</ThemedText>
       </View>
       
-      {/* Search Bar */}
+      {/* Search and Add Bar */}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchContainer}>
           <Search size={20} color="#6B7280" />
@@ -203,6 +193,15 @@ export default function DriversScreen() {
             placeholderTextColor="#6B7280"
           />
         </View>
+        
+        {/* Add Driver Button */}
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={handleAddNewDriver}
+        >
+          <Plus size={20} color="#FFFFFF" />
+          <ThemedText style={styles.addButtonText}>Add Driver</ThemedText>
+        </TouchableOpacity>
       </View>
       
       {/* Main content with fade-in animation */}
@@ -216,6 +215,16 @@ export default function DriversScreen() {
           showsVerticalScrollIndicator={false}
         />
       </Animated.View>
+      
+      {/* Driver Edit/Add Modal */}
+      <DriverModal
+        isVisible={isModalVisible}
+        onClose={() => setIsModalVisible(false)}
+        driver={selectedDriver}
+        onSave={handleSaveDriver}
+        onDelete={handleDeleteDriver}
+        onSendPasswordReset={handleSendPasswordReset}
+      />
     </View>
   );
 }
@@ -248,116 +257,105 @@ const styles = StyleSheet.create({
   },
   searchBarContainer: {
     padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#E5E7EB',
   },
   searchContainer: {
-    height: 40,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 40,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
     height: 40,
+    fontSize: 15,
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4361ee',
+    borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 16,
+    marginLeft: 12,
+  },
+  addButtonText: {
+    color: 'white',
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  listContainer: {
+    padding: 16,
   },
   list: {
     flex: 1,
   },
-  listContainer: {
-    paddingVertical: 8,
-  },
   driverCard: {
-    backgroundColor: 'white',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   driverInfo: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
   driverInitials: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: '#4361ee',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    alignItems: 'center',
+    marginRight: 12,
   },
   initialsText: {
     color: 'white',
+    fontSize: 16,
     fontWeight: 'bold',
-    fontSize: 14,
   },
   driverDetails: {
     flex: 1,
   },
   driverName: {
-    fontWeight: '600',
     fontSize: 16,
-    color: '#1F2937',
+    fontWeight: '600',
+    color: '#111827',
     marginBottom: 4,
   },
   contactInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 4,
+    marginVertical: 2,
   },
   contactText: {
     fontSize: 14,
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 6,
   },
   actionButton: {
     padding: 8,
-  },
-  actionMenu: {
-    position: 'absolute',
-    right: 16,
-    top: 40,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
-    zIndex: 10,
-  },
-  actionMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    minWidth: 120,
-  },
-  actionMenuText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
-  },
-  deleteText: {
-    color: '#EF4444',
   },
 });

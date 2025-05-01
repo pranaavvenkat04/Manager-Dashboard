@@ -30,7 +30,6 @@ import {
 import { validateRouteForm } from '@/utils/ValidationUtils';
 import { calculateRouteTimings, fetchDrivers, generateRandomRouteKey } from '@/utils/RouteUtils';
 import styles from '@/styles/RouteModalStyles';
-import { webDatepickerStyles } from '@/styles/ScheduleStyles';
 
 /**
  * Main modal component for adding a new route
@@ -66,11 +65,39 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
     if (Platform.OS === 'web' && visible) {
       const style = document.createElement('style');
       style.textContent = `
+        /* Make sure modals have a lower z-index than the date picker */
+        .modalView {
+          z-index: 10 !important;
+          overflow: visible !important;
+        }
+        
+        .modal-content {
+          overflow: visible !important;
+        }
+        
+        /* Allow calendar positioning outside the modal */
+        #calendar-portal {
+          z-index: 1000 !important;
+        }
+        
         .input-container:hover {
           background-color: #E2E4E8 !important;
         }
         .input-container:focus-within {
           background-color: #D1D5DB !important;
+        }
+        
+        /* Date picker field styles */
+        .date-picker-field {
+          cursor: pointer !important;
+        }
+        .date-picker-field:hover {
+          background-color: #E2E4E8 !important;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+        }
+        .date-picker-field.active {
+          background-color: #E2E4E8 !important;
+          border: 1px solid #4361ee !important;
         }
         
         /* Search result styles */
@@ -128,8 +155,6 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        
-        ${webDatepickerStyles}
       `;
       document.head.appendChild(style);
       
@@ -142,11 +167,11 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
   
   // Generate a random route key on mount
   useEffect(() => {
-    if (visible) {
+    if (visible && !routeKey) {
       const randomKey = generateRandomRouteKey();
       setRouteKey(randomKey);
     }
-  }, [visible]);
+  }, [visible, routeKey]);
   
   // Reset form when modal closes
   useEffect(() => {
@@ -199,9 +224,15 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
       newStops[index] = newStops[index - 1];
       newStops[index - 1] = temp;
       
+      // After reordering, recalculate ETAs
+      if (startTime) {
+        const { updatedStops } = calculateRouteTimings(newStops, startTime);
+        return updatedStops;
+      }
+      
       return newStops;
     });
-  }, []);
+  }, [startTime]);
   
   // Move stop down in order
   const moveStopDown = useCallback((id: string) => {
@@ -214,9 +245,15 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
       newStops[index] = newStops[index + 1];
       newStops[index + 1] = temp;
       
+      // After reordering, recalculate ETAs
+      if (startTime) {
+        const { updatedStops } = calculateRouteTimings(newStops, startTime);
+        return updatedStops;
+      }
+      
       return newStops;
     });
-  }, []);
+  }, [startTime]);
   
   // Edit stop fields
   const editStop = useCallback((id: string, field: 'name' | 'address', value: string) => {
@@ -294,12 +331,26 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
     // Create route data object including schedule
     const routeData: RouteData = {
       name: routeName,
-      routeKey: routeKey,
-      startTime: startTime,
-      endTime: endTime || calculatedEndTime,
-      stops: stops,
-      estimatedDuration: estimatedDuration,
-      assignedDriverId: selectedDriver,
+      title: routeName, // For backward compatibility
+      route_key: routeKey,
+      routeCode: routeKey, // For backward compatibility
+      start_time: startTime,
+      startTime: startTime, // For backward compatibility
+      end_time: endTime || calculatedEndTime,
+      endTime: endTime || calculatedEndTime, // For backward compatibility
+      stops: stops.map(stop => ({
+        ...stop,
+        latitude: stop.lat || 0,
+        longitude: stop.lng || 0,
+        order: 0, // Will be set on server
+        status: true,
+      })),
+      stops_count: stops.length,
+      stopsCount: stops.length, // For backward compatibility
+      estimated_duration: estimatedDuration,
+      estimatedDuration: estimatedDuration, // For backward compatibility
+      assigned_driver_id: selectedDriver,
+      assignedDriverId: selectedDriver, // For backward compatibility
       schedule: schedule  // Include schedule data
     };
     

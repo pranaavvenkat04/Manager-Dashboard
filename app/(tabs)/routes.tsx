@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated, Platform, Modal } from 'react-native';
-import { Search, Plus, Filter, Trash2, X } from 'lucide-react';
+import { Search, Plus, Filter, Trash2, X, Calendar } from 'lucide-react';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -10,6 +10,7 @@ import UpdateRouteModal from '@/components/modals/UpdateRouteModal';
 import AddRouteModal from '@/components/modals/AddRouteModal';
 import RouteCard from '@/components/routes/RouteCard';
 import { routesFirebaseMethods, formatDate } from '@/utils/FirebaseUtils';
+import RouteExceptionsModal from '@/components/modals/RouteExceptionsModal';
 
 import { RouteData, RouteSchedule, ScheduleException } from '@/types/RouteTypes';
 
@@ -212,6 +213,9 @@ export default function RoutesScreen() {
   
   // Animation for content fade-in
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  
+  // Add state for exceptions modal
+  const [exceptionsModalVisible, setExceptionsModalVisible] = useState(false);
 
   useEffect(() => {
     // Fetch routes and drivers on component mount
@@ -451,16 +455,88 @@ export default function RoutesScreen() {
             <div className="spinner" style={{
               width: '24px',
               height: '24px',
-              borderRadius: '50%',
-              border: '3px solid rgba(67, 97, 238, 0.3)',
+              border: '3px solid rgba(0, 0, 0, 0.1)',
               borderTopColor: '#4361ee',
+              borderRadius: '50%',
               animation: 'spin 1s linear infinite',
-              marginTop: '12px'
-            }}></div>
+            }} />
           )}
         </View>
       </View>
     );
+  };
+
+  // Add function to open exceptions modal
+  const handleOpenExceptionsModal = () => {
+    setExceptionsModalVisible(true);
+  };
+
+  // Add function to apply exception to all routes
+  const handleApplyExceptionToAllRoutes = async (exception: ScheduleException) => {
+    // Show loading state
+    setIsLoading(true);
+    
+    try {
+      // Create a copy of all routes to update
+      const updatedRoutes = [...routes];
+      
+      // Loop through each route and add the exception
+      for (let i = 0; i < updatedRoutes.length; i++) {
+        const route = updatedRoutes[i];
+        
+        // Ensure schedule and exceptions arrays exist
+        if (!route.schedule) {
+          route.schedule = {
+            operatingDays: [1, 2, 3, 4, 5], // Default to weekdays
+            exceptions: [],
+            effectiveDates: {
+              startDate: new Date()
+            }
+          };
+        }
+        
+        if (!route.schedule.exceptions) {
+          route.schedule.exceptions = [];
+        }
+        
+        // Add the exception if it doesn't already exist for the same date
+        const existingExceptionIndex = route.schedule.exceptions.findIndex(
+          (ex) => ex.date.toDateString() === exception.date.toDateString()
+        );
+        
+        if (existingExceptionIndex >= 0) {
+          // Replace existing exception for the same date
+          route.schedule.exceptions[existingExceptionIndex] = exception;
+        } else {
+          // Add new exception
+          route.schedule.exceptions.push(exception);
+        }
+      }
+      
+      // Update the state with the new routes
+      setRoutes(updatedRoutes);
+      setFilteredRoutes(updatedRoutes);
+      
+      // In a real implementation, this would update the routes in Firebase
+      // For each route in the database
+      // await Promise.all(updatedRoutes.map(route => 
+      //   updateDoc(doc(db, 'Routes', route.id), { 
+      //     schedule: {
+      //       ...route.schedule,
+      //       exceptions: route.schedule.exceptions
+      //     }
+      //   })
+      // ));
+      
+      // Show success message
+      Alert.alert('Success', 'Exception has been applied to all routes');
+    } catch (error) {
+      console.error('Error applying exception to routes:', error);
+      Alert.alert('Error', 'Failed to apply exception to routes. Please try again.');
+      throw error; // Rethrow to be caught by the modal
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -486,6 +562,15 @@ export default function RoutesScreen() {
             placeholderTextColor="#6B7280"
           />
         </View>
+        
+        {/* Add exception to all routes button */}
+        <TouchableOpacity 
+          style={styles.exceptionsButton}
+          onPress={handleOpenExceptionsModal}
+        >
+          <Calendar size={18} color="#4361ee" />
+          <ThemedText style={styles.exceptionsButtonText}>Exceptions</ThemedText>
+        </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.addButton}
@@ -547,12 +632,18 @@ export default function RoutesScreen() {
         <style dangerouslySetInnerHTML={{
           __html: `
             @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
+              to { transform: rotate(360deg); }
             }
           `
         }} />
       )}
+      
+      {/* Add Route Exceptions Modal */}
+      <RouteExceptionsModal
+        isVisible={exceptionsModalVisible}
+        onClose={() => setExceptionsModalVisible(false)}
+        onApply={handleApplyExceptionToAllRoutes}
+      />
     </View>
   );
 }
@@ -584,43 +675,45 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   searchBarContainer: {
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#E5E7EB',
   },
   searchContainer: {
     flex: 1,
-    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     paddingHorizontal: 12,
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 40,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
     height: 40,
+    fontSize: 15,
+    color: '#1F2937',
+    marginLeft: 8,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#4361ee',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
     borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 16,
+    marginLeft: 12,
   },
   addButtonText: {
     color: 'white',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 8,
+    fontWeight: '500',
+    marginLeft: 6,
   },
   list: {
     flex: 1,
@@ -735,5 +828,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#4B5563',
+  },
+  exceptionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 16,
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  exceptionsButtonText: {
+    color: '#4361ee',
+    fontWeight: '500',
+    fontSize: 14,
+    marginLeft: 6,
   },
 });

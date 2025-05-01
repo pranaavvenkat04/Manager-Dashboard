@@ -79,26 +79,34 @@ const RouteDetailsForm = ({
             style={[
               styles.formInputContainer, 
               fieldErrors.routeKey && styles.inputError,
-              { overflow: 'hidden' }
+              { overflow: 'hidden' },
+              { backgroundColor: '#D1D5DB' } // Darker gray background
             ]} 
             className="input-container"
           >
             <TextInput
               style={[
                 styles.formInput,
-                { borderWidth: 0, borderColor: 'transparent' },
-                webFocusReset,
-                routeKey ? { backgroundColor: '#E2E4E8' } : {}
+                { 
+                  borderWidth: 0, 
+                  borderColor: 'transparent',
+                  backgroundColor: '#D1D5DB', 
+                  color: '#1F2937', 
+                  fontWeight: 'bold'
+                },
+                webFocusReset
               ]}
               value={routeKey}
+              readOnly={true}
+              editable={false}
               onChangeText={(text) => {
                 setRouteKey(text);
                 if (text.trim()) {
                   setFieldErrors({...fieldErrors, routeKey: undefined});
                 }
               }}
-              placeholder="Enter route ID"
-              placeholderTextColor="#9CA3AF"
+              placeholder="Route ID is auto-generated"
+              placeholderTextColor="#6B7280"
               selectionColor="#4361ee"
               underlineColorAndroid="transparent"
             />
@@ -197,7 +205,6 @@ const RouteDetailsForm = ({
                 color: '#1F2937',
                 fontSize: '14px',
                 fontWeight: '500',
-                outline: 'none',
                 appearance: 'none',
                 backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' stroke='%236B7280' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
                 backgroundRepeat: 'no-repeat',
@@ -251,16 +258,14 @@ const RouteDetailsForm = ({
               <ThemedText style={styles.timingValue}>{calculatedEndTime}</ThemedText>
             </View>
             
-            <TouchableOpacity 
-              style={styles.useCalculatedButton}
-              onPress={() => setEndTime(calculatedEndTime)}
-              className="useCalculatedButton"
-            >
-              <Clock size={14} color="#FFFFFF" style={styles.calculatedButtonIcon} />
-              <ThemedText style={styles.useCalculatedText}>
-                Use Calculated Time
+            <View style={styles.timingRow}>
+              <ThemedText style={styles.timingLabel}>Est. Duration:</ThemedText>
+              <ThemedText style={styles.durationText}>
+                {Math.floor(estimatedDuration / 60) > 0 
+                  ? `${Math.floor(estimatedDuration / 60)}h ${estimatedDuration % 60}m` 
+                  : `${estimatedDuration}m`}
               </ThemedText>
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}

@@ -1,7 +1,7 @@
 import React, { ReactNode, useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback, Platform } from 'react-native';
 import { usePathname, router } from 'expo-router';
-import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut, Bus } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable } from 'react-native';
@@ -40,7 +40,7 @@ interface RouteItem {
 
 const ROUTES: RouteItem[] = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/drivers', icon: Package, label: 'Drivers' },
+  { path: '/drivers', icon: Bus, label: 'Drivers' },
   { path: '/routes', icon: MapPin, label: 'Routes' },
   { path: '/users', icon: Users, label: 'Students/Parents' },
 ];

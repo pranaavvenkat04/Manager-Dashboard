@@ -76,7 +76,7 @@ const StopItem = ({
             <TextInput
               style={[
                 styles.editStopInput,
-                { borderWidth: 0, borderColor: 'transparent', outline: 'none' },
+                { borderWidth: 0, borderColor: 'transparent' },
                 stop.name ? { backgroundColor: '#E2E4E8' } : {}
               ]}
               value={stop.name}
@@ -106,7 +106,7 @@ const StopItem = ({
             style={[styles.stopInfo, { overflow: 'hidden' }]}
             onPress={() => setEditing(true)}
           >
-            <View style={styles.stopNameContainer}>
+            <View style={{ marginBottom: 2 }}>
               <ThemedText 
                 style={[styles.stopName, { overflow: 'hidden' }]}
                 numberOfLines={1}
@@ -116,14 +116,18 @@ const StopItem = ({
               </ThemedText>
             </View>
             <ThemedText 
-              style={[styles.stopAddress, { overflow: 'hidden', fontWeight: 'bold' }]}
+              style={[styles.stopAddress, { overflow: 'hidden' }]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
               {stop.address}
             </ThemedText>
             {stop.eta && (
-              <ThemedText style={styles.stopEta}>ETA: {stop.eta}</ThemedText>
+              <View style={styles.etaContainer}>
+                <ThemedText style={[styles.stopAddress, { fontWeight: '500' }]}>
+                  ETA: {stop.eta}
+                </ThemedText>
+              </View>
             )}
           </TouchableOpacity>
         )}

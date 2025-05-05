@@ -135,6 +135,10 @@ export interface RouteDetailsFormProps {
   setSelectedDriver: (id: string) => void;
   fieldErrors: FieldErrors;
   setFieldErrors: (errors: FieldErrors) => void;
+  routeDescription?: string;
+  setRouteDescription?: (text: string) => void;
+  useEstimatedDuration?: boolean;
+  setUseEstimatedDuration?: (use: boolean) => void;
 }
 
 export interface RouteScheduleFormProps {

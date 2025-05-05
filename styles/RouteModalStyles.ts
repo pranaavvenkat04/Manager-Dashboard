@@ -1,4 +1,5 @@
 import { StyleSheet, Dimensions, Platform } from 'react-native';
+import { Theme } from '@/constants/Colors';
 
 // Get window dimensions for responsive sizing
 const windowWidth = Dimensions.get('window').width;
@@ -566,7 +567,20 @@ const styles = StyleSheet.create({
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   },
   deleteButton: {
-    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Theme?.colors?.error || '#EF4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)', // Light red background
+  },
+  deleteButtonText: {
+    color: Theme?.colors?.error || '#EF4444',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
   },
   emptyStops: {
     flex: 1,
@@ -715,37 +729,44 @@ const styles = StyleSheet.create({
   // Action buttons
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    backgroundColor: 'white',
+  },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 6,
-    backgroundColor: '#F3F4F6',
     marginRight: 12,
   },
   cancelButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#4B5563',
   },
   saveButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    backgroundColor: Theme?.colors?.primary || '#4361ee',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 6,
-    backgroundColor: '#4361ee',
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButtonDisabled: {
-    opacity: 0.7
+    backgroundColor: '#A5B4FC',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
   savingContainer: {
     flexDirection: 'row',
@@ -852,6 +873,62 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     fontStyle: 'italic',
+  },
+  
+  // Additional form styles
+  fieldHelpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  calculatedEndTime: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calculatedTimeText: {
+    fontSize: 12,
+    color: '#6B7280',
+    flex: 1,
+  },
+  
+  // Time mode selector styles
+  timeModeSelectorContainer: {
+    marginBottom: 16,
+  },
+  timeModeOptions: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  timeModeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  timeModeButtonSelected: {
+    backgroundColor: '#4361ee',
+  },
+  timeModeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
+  },
+  timeModeButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  
+  // Add helper text style for read-only fields
+  helperText: {
+    fontSize: 12,
+    color: '#9CA3AF', // Theme.colors.text.tertiary equivalent
+    marginTop: 4,
   },
 });
 

@@ -30,6 +30,7 @@ import {
 import { validateRouteForm } from '@/utils/ValidationUtils';
 import { calculateRouteTimings, fetchDrivers, generateRandomRouteKey } from '@/utils/RouteUtils';
 import styles from '@/styles/RouteModalStyles';
+import { Theme } from '@/constants/Colors';
 
 /**
  * Main modal component for adding a new route
@@ -393,7 +394,7 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
           <View style={styles.modalHeader}>
             <ThemedText style={styles.modalTitle}>Add New Route</ThemedText>
             <TouchableOpacity style={styles.closeButton} onPress={onClose} className="closeButton">
-              <X size={24} color="#6B7280" />
+              <X size={24} color={Theme.colors.text.secondary} />
             </TouchableOpacity>
           </View>
           
@@ -410,7 +411,7 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
                 onPress={() => setShowErrorMessage(false)}
                 className="closeErrorButton"
               >
-                <X size={18} color="#B91C1C" />
+                <X size={18} color={Theme.colors.error} />
               </TouchableOpacity>
             </View>
           )}
@@ -496,39 +497,42 @@ const AddRouteModal = ({ visible, onClose, onSave }: AddRouteModalProps) => {
           
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
-              disabled={isSaving}
-              className="cancelButton"
-            >
-              <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-              onPress={handleSave}
-              disabled={isSaving}
-              className="saveButton"
-            >
-              {isSaving ? (
-                <View style={styles.savingContainer}>
-                  {/* Simple loading spinner for web */}
-                  <div className="spinner" style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '8px'
-                  }}></div>
-                  <ThemedText style={styles.saveButtonText}>Saving...</ThemedText>
-                </View>
-              ) : (
-                <ThemedText style={styles.saveButtonText}>Save Route</ThemedText>
-              )}
-            </TouchableOpacity>
+            <View style={{ flex: 1 }}></View>
+            <View style={styles.rightButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={onClose}
+                disabled={isSaving}
+                className="cancelButton"
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={isSaving}
+                className="saveButton"
+              >
+                {isSaving ? (
+                  <View style={styles.savingContainer}>
+                    {/* Simple loading spinner for web */}
+                    <div className="spinner" style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      animation: 'spin 1s linear infinite',
+                      marginRight: '8px'
+                    }}></div>
+                    <ThemedText style={styles.saveButtonText}>Saving...</ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText style={styles.saveButtonText}>Save Route</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>

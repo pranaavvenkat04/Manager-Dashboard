@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Clock, MapPin, Calendar, ChevronDown, ChevronUp, MoreVertical } from 'lucide-react';
+import { Clock, MapPin, Calendar, ChevronDown, ChevronUp, Edit } from 'lucide-react';
 
 import { ThemedText } from '@/components/ThemedText';
 import { formatDate } from '@/utils/FirebaseUtils';
+import { Theme } from '@/constants/Colors';
 
 // Define props for RouteCard component
 interface RouteCardProps {
@@ -73,24 +74,38 @@ const RouteCard = ({
     }).length;
   };
 
+  // Get the route identifier from route_code field if available
+  const getRouteIdentifier = () => {
+    return route.route_code || route.route_key || route.routeCode || "";
+  };
+
   return (
     <View style={styles.routeCard}>
-      <View style={styles.routeInfo}>
-        <View style={styles.routeHeader}>
-          <View style={styles.routeIdentifier}>
-            <ThemedText style={styles.routeKey}>{route.route_key}</ThemedText>
+      <View style={styles.cardContent}>
+        <View style={styles.headerRow}>
+          <View style={styles.routeIdBadge}>
+            <ThemedText style={styles.routeIdText}>
+              {getRouteIdentifier()}
+            </ThemedText>
           </View>
           <ThemedText style={styles.routeName}>{route.name}</ThemedText>
+          
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => onEdit(route)}
+          >
+            <Edit size={18} color={Theme.colors.text.secondary} />
+          </TouchableOpacity>
         </View>
         
         <View style={styles.routeDetails}>
           <View style={styles.detailItem}>
-            <Clock size={14} color="#6B7280" />
+            <Clock size={14} color={Theme.colors.text.secondary} />
             <ThemedText style={styles.detailText}>{route.start_time} - {route.end_time}</ThemedText>
           </View>
           <View style={styles.detailItem}>
-            <MapPin size={14} color="#6B7280" />
-            <ThemedText style={styles.detailText}>{route.stops_count} stops</ThemedText>
+            <MapPin size={14} color={Theme.colors.text.secondary} />
+            <ThemedText style={styles.detailText}>{route.stops_count || route.stops || 0} stops</ThemedText>
           </View>
         </View>
         
@@ -98,7 +113,7 @@ const RouteCard = ({
         {route.schedule && (
           <View style={styles.schedulePreview}>
             <View style={styles.scheduleItem}>
-              <Calendar size={14} color="#4361ee" />
+              <Calendar size={14} color={Theme.colors.primary} />
               <ThemedText style={styles.scheduleText}>
                 {formatOperatingDays(route.schedule.operatingDays || [])}
               </ThemedText>
@@ -156,55 +171,30 @@ const RouteCard = ({
           </View>
         )}
         
-        <View style={styles.driverSection}>
-          <ThemedText style={styles.driverLabel}>Driver:</ThemedText>
-          <ThemedText style={styles.driverName}>
-            {getDriverName(route.assigned_driver_id)}
-          </ThemedText>
-        </View>
-        
-        {/* Expand/Collapse button */}
-        {route.schedule && (
-          <TouchableOpacity 
-            style={styles.expandButton}
-            onPress={() => setExpanded(!expanded)}
-          >
-            <ThemedText style={styles.expandButtonText}>
-              {expanded ? 'Hide schedule details' : 'View schedule details'}
+        <View style={styles.bottomSection}>
+          <View style={styles.driverSection}>
+            <ThemedText style={styles.driverLabel}>Driver:</ThemedText>
+            <ThemedText style={styles.driverName}>
+              {getDriverName(route.assigned_driver_id)}
             </ThemedText>
-            {expanded ? 
-              <ChevronUp size={16} color="#4361ee" /> : 
-              <ChevronDown size={16} color="#4361ee" />
-            }
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      <View style={styles.actionContainer}>
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={() => onActionMenu(route)}
-        >
-          <MoreVertical size={20} color="#6B7280" />
-        </TouchableOpacity>
-        
-        {/* Action Menu - displayed inline instead of absolutely positioned */}
-        {actionMenuVisible && activeRouteId === route.id && (
-          <View style={styles.actionMenu}>
-            <TouchableOpacity 
-              style={styles.actionMenuItem} 
-              onPress={() => onEdit(route)}
-            >
-              <ThemedText style={styles.actionMenuText}>Edit</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionMenuItem} 
-              onPress={() => onDelete(route)}
-            >
-              <ThemedText style={[styles.actionMenuText, styles.deleteText]}>Delete</ThemedText>
-            </TouchableOpacity>
           </View>
-        )}
+          
+          {/* Expand/Collapse button */}
+          {route.schedule && (
+            <TouchableOpacity 
+              style={styles.expandButton}
+              onPress={() => setExpanded(!expanded)}
+            >
+              <ThemedText style={styles.expandButtonText}>
+                {expanded ? 'Hide schedule details' : 'View schedule details'}
+              </ThemedText>
+              {expanded ? 
+                <ChevronUp size={16} color={Theme.colors.primary} /> : 
+                <ChevronDown size={16} color={Theme.colors.primary} />
+              }
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -212,40 +202,43 @@ const RouteCard = ({
 
 const styles = StyleSheet.create({
   routeCard: {
-    backgroundColor: 'white',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    position: 'relative',
+    backgroundColor: Theme.colors.background.main,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  routeInfo: {
+  cardContent: {
     flex: 1,
   },
-  routeHeader: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  routeIdentifier: {
-    backgroundColor: '#E0E7FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  routeIdBadge: {
+    backgroundColor: Theme.colors.primary,
     borderRadius: 6,
-    marginRight: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  routeKey: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#4F46E5',
+  routeIdText: {
+    fontSize: 16,
+    color: Theme.colors.text.inverse,
+    fontWeight: 'bold',
   },
   routeName: {
-    fontWeight: '600',
+    flex: 1,
     fontSize: 16,
-    color: '#1F2937',
+    fontWeight: '600',
+    color: Theme.colors.text.primary,
   },
   routeDetails: {
     flexDirection: 'row',
@@ -261,7 +254,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Theme.colors.text.secondary,
     marginLeft: 4,
   },
   schedulePreview: {
@@ -282,12 +275,12 @@ const styles = StyleSheet.create({
   },
   scheduleText: {
     fontSize: 14,
-    color: '#4361ee',
+    color: Theme.colors.primary,
     fontWeight: '500',
     marginLeft: 4,
   },
   exceptionsBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: Theme.colors.warning + '20', // 20% opacity
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -295,17 +288,17 @@ const styles = StyleSheet.create({
   },
   exceptionsBadgeText: {
     fontSize: 12,
-    color: '#B91C1C',
+    color: Theme.colors.warning,
     fontWeight: '500',
   },
   expandedDetails: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: Theme.colors.background.secondary,
     padding: 12,
     borderRadius: 8,
     marginTop: 4,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Theme.colors.border.light,
   },
   expandedSection: {
     marginBottom: 8,
@@ -313,7 +306,7 @@ const styles = StyleSheet.create({
   expandedSectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4B5563',
+    color: Theme.colors.text.secondary,
     marginBottom: 4,
   },
   effectiveDates: {
@@ -322,7 +315,7 @@ const styles = StyleSheet.create({
   },
   effectiveDateText: {
     fontSize: 13,
-    color: '#4B5563',
+    color: Theme.colors.text.secondary,
     marginRight: 12,
   },
   exceptionsList: {
@@ -340,19 +333,25 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   noServiceBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: Theme.colors.error + '20', // 20% opacity
   },
   specialServiceBadge: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: Theme.colors.info + '20', // 20% opacity
   },
   exceptionBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#1F2937',
+    color: Theme.colors.text.secondary,
   },
   exceptionDate: {
     fontSize: 12,
-    color: '#6B7280',
+    color: Theme.colors.text.secondary,
+  },
+  bottomSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   driverSection: {
     flexDirection: 'row',
@@ -361,66 +360,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    alignSelf: 'flex-start',
+    marginBottom: 4,
   },
   driverLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Theme.colors.text.secondary,
     marginRight: 4,
   },
   driverName: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4B5563',
+    color: Theme.colors.text.primary,
   },
   expandButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
     paddingVertical: 4,
+    marginBottom: 4,
   },
   expandButtonText: {
     fontSize: 14,
-    color: '#4361ee',
+    color: Theme.colors.primary,
     marginRight: 4,
-  },
-  actionContainer: {
-    position: 'relative',
   },
   actionButton: {
     padding: 8,
-  },
-  actionMenu: {
-    position: 'absolute',
-    top: 40,
-    right: 0,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    width: 150,
-    zIndex: 1000,
-  },
-  actionMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  actionMenuText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#4B5563',
-  },
-  deleteText: {
-    color: '#EF4444',
   },
 });
 

@@ -1,13 +1,24 @@
-import React from 'react';
 import { Stack } from 'expo-router';
+import { useMemo } from 'react';
+import { Platform } from 'react-native';
+import { Theme } from '@/constants/Colors';
 
-export default function TabsLayout() {
+export default function TabLayout() {
+  // Memoize screen options to prevent unnecessary re-renders
+  const screenOptions = useMemo(() => ({
+    headerShown: false,
+    contentStyle: { backgroundColor: '#F8FAFC' },
+    animation: 'fade' as const,
+    animationDuration: 150,
+  }), []);
+
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false, // We're using our own sidebar header
-        contentStyle: { backgroundColor: '#F8FAFC' },
-      }}
-    />
+    <Stack screenOptions={screenOptions}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="routes" />
+      <Stack.Screen name="drivers" />
+      <Stack.Screen name="users" />
+      <Stack.Screen name="settings" />
+    </Stack>
   );
 }

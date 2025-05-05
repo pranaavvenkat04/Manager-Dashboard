@@ -25,7 +25,11 @@ const RouteDetailsForm = ({
   selectedDriver,
   setSelectedDriver,
   fieldErrors,
-  setFieldErrors
+  setFieldErrors,
+  routeDescription = '',
+  setRouteDescription = (text: string) => {},
+  useEstimatedDuration,
+  setUseEstimatedDuration
 }: RouteDetailsFormProps) => {
 
   return (
@@ -79,8 +83,7 @@ const RouteDetailsForm = ({
             style={[
               styles.formInputContainer, 
               fieldErrors.routeKey && styles.inputError,
-              { overflow: 'hidden' },
-              { backgroundColor: '#D1D5DB' } // Darker gray background
+              { overflow: 'hidden', backgroundColor: '#f0f0f0', opacity: 0.7 }
             ]} 
             className="input-container"
           >
@@ -90,9 +93,8 @@ const RouteDetailsForm = ({
                 { 
                   borderWidth: 0, 
                   borderColor: 'transparent',
-                  backgroundColor: '#D1D5DB', 
-                  color: '#1F2937', 
-                  fontWeight: 'bold'
+                  backgroundColor: '#f0f0f0', 
+                  color: '#1F2937'
                 },
                 webFocusReset
               ]}
@@ -110,6 +112,92 @@ const RouteDetailsForm = ({
               selectionColor="#4361ee"
               underlineColorAndroid="transparent"
             />
+          </View>
+          <ThemedText style={{fontSize: 12, color: '#9CA3AF', marginTop: 4}}>
+            Route ID cannot be modified.
+          </ThemedText>
+        </View>
+      </View>
+      
+      {/* Description Field */}
+      <View style={styles.formRow}>
+        <View style={[styles.formGroup, { flex: 1 }]}>
+          <View style={styles.formLabelContainer}>
+            <ThemedText style={styles.formLabel}>Route Description</ThemedText>
+          </View>
+          <View 
+            style={[
+              styles.formInputContainer, 
+              { overflow: 'hidden', height: 100 }
+            ]} 
+            className="input-container"
+          >
+            <TextInput
+              style={[
+                styles.formInput,
+                { 
+                  borderWidth: 0, 
+                  borderColor: 'transparent',
+                  height: 100,
+                  textAlignVertical: 'top',
+                  paddingTop: 10
+                },
+                webFocusReset,
+                routeDescription ? { backgroundColor: '#E2E4E8' } : {}
+              ]}
+              value={routeDescription}
+              onChangeText={setRouteDescription}
+              placeholder="Enter route description (optional)"
+              placeholderTextColor="#9CA3AF"
+              selectionColor="#4361ee"
+              underlineColorAndroid="transparent"
+              multiline={true}
+              numberOfLines={4}
+            />
+          </View>
+        </View>
+      </View>
+      
+      {/* Time Mode Selector */}
+      <View style={styles.formRow}>
+        <View style={[styles.formGroup, { flex: 1 }]}>
+          <View style={styles.timeModeSelectorContainer}>
+            <ThemedText style={styles.formLabel}>Time Settings</ThemedText>
+            <View style={styles.timeModeOptions}>
+              <TouchableOpacity 
+                style={[
+                  styles.timeModeButton, 
+                  !useEstimatedDuration && styles.timeModeButtonSelected
+                ]}
+                onPress={() => setUseEstimatedDuration(false)}
+              >
+                <ThemedText 
+                  style={[
+                    styles.timeModeButtonText,
+                    !useEstimatedDuration && styles.timeModeButtonTextSelected
+                  ]}
+                >
+                  Use Actual Times
+                </ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.timeModeButton, 
+                  useEstimatedDuration && styles.timeModeButtonSelected
+                ]}
+                onPress={() => setUseEstimatedDuration(true)}
+              >
+                <ThemedText 
+                  style={[
+                    styles.timeModeButtonText,
+                    useEstimatedDuration && styles.timeModeButtonTextSelected
+                  ]}
+                >
+                  Use Estimated Duration
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -170,7 +258,7 @@ const RouteDetailsForm = ({
                 styles.timeInput, 
                 { borderWidth: 0, borderColor: 'transparent' },
                 webFocusReset,
-                endTime !== '09:15 AM' ? { backgroundColor: '#E2E4E8' } : {}
+                endTime ? { backgroundColor: '#E2E4E8' } : {}
               ]}
               value={endTime}
               onChangeText={(text) => {
@@ -179,12 +267,26 @@ const RouteDetailsForm = ({
                   setFieldErrors({...fieldErrors, endTime: undefined});
                 }
               }}
-              placeholder="09:15 AM"
+              placeholder={calculatedEndTime ? calculatedEndTime : "09:00 AM"}
               placeholderTextColor="#9CA3AF"
               selectionColor="#4361ee"
               underlineColorAndroid="transparent"
             />
           </View>
+          
+          {calculatedEndTime && !endTime && (
+            <View style={styles.calculatedEndTime}>
+              <ThemedText style={styles.calculatedTimeText}>
+                Calculated end time from stops: {calculatedEndTime}
+              </ThemedText>
+              <TouchableOpacity 
+                style={styles.useCalculatedButton}
+                onPress={() => setEndTime(calculatedEndTime)}
+              >
+                <ThemedText style={styles.useCalculatedText}>Use Calculated</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
       

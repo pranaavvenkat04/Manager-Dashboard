@@ -1,22 +1,112 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, Switch, ScrollView, Alert } from 'react-native';
-import { User, Bell, Shield, Moon, HelpCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, TouchableOpacity, Switch, ScrollView, Alert, Modal, Platform } from 'react-native';
+import { User, Bell, Shield, Moon, HelpCircle, RefreshCw, X, Building2 } from 'lucide-react';
 import { Ionicons } from '@expo/vector-icons';
+import { signOut } from '../../utils/firebase';
+import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useSchoolContext } from '@/components/PersistentSidebar';
+import { Theme } from '@/constants/Colors';
+
+// School Info Modal Component
+interface SchoolInfoModalProps {
+  isVisible: boolean;
+  onClose: () => void;
+  schoolData: {
+    name?: string;
+    id?: string;
+    code?: string;
+    address?: string;
+  } | null;
+}
+
+const SchoolInfoModal = ({ isVisible, onClose, schoolData }: SchoolInfoModalProps) => {
+  return (
+    <Modal
+      visible={isVisible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <ThemedText style={styles.modalTitle}>School Information</ThemedText>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <X size={24} color={Theme.colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalScrollView}>
+            <View style={styles.infoSection}>
+              <View style={styles.infoItem}>
+                <ThemedText style={styles.infoLabel}>School Name</ThemedText>
+                <ThemedText style={styles.infoValue}>{schoolData?.name || "Not Available"}</ThemedText>
+              </View>
+              
+              <View style={styles.infoItem}>
+                <ThemedText style={styles.infoLabel}>School ID</ThemedText>
+                <ThemedText style={styles.infoValue}>{schoolData?.id || "Not Available"}</ThemedText>
+              </View>
+              
+              <View style={styles.infoItem}>
+                <ThemedText style={styles.infoLabel}>School Code</ThemedText>
+                <ThemedText style={styles.infoValue}>{schoolData?.code || "Not Available"}</ThemedText>
+              </View>
+              
+              <View style={styles.infoItem}>
+                <ThemedText style={styles.infoLabel}>Address</ThemedText>
+                <ThemedText style={styles.infoValue}>{schoolData?.address || "Not Available"}</ThemedText>
+              </View>
+            </View>
+          </ScrollView>
+          
+          <TouchableOpacity style={styles.closeModalButton} onPress={onClose}>
+            <ThemedText style={styles.closeModalButtonText}>Close</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 export default function SettingsScreen() {
   const { schoolName } = useSchoolContext();
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [locationTracking, setLocationTracking] = useState(true);
+  const [isSchoolInfoModalVisible, setIsSchoolInfoModalVisible] = useState(false);
+  const router = useRouter();
+  
+  // Create a local schoolData object for the modal
+  const [schoolData, setSchoolData] = useState<{
+    name?: string;
+    id?: string;
+    code?: string;
+    address?: string;
+  }>({
+    name: schoolName,
+    id: "school-123",
+    code: "SCH001",
+    address: "123 School Avenue, City, State 12345"
+  });
+  
+  // Update schoolData when schoolName changes
+  useEffect(() => {
+    setSchoolData(prev => ({
+      ...prev,
+      name: schoolName
+    }));
+  }, [schoolName]);
 
   // Setting toggle handlers
   const toggleNotifications = () => setNotifications(!notifications);
   const toggleDarkMode = () => setDarkMode(!darkMode);
-  const toggleLocationTracking = () => setLocationTracking(!locationTracking);
+  
+  // Modal handlers
+  const openSchoolInfoModal = () => setIsSchoolInfoModalVisible(true);
+  const closeSchoolInfoModal = () => setIsSchoolInfoModalVisible(false);
 
   // Reset and logout handlers
   const handleResetApp = () => {
@@ -37,21 +127,15 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          onPress: () => {
-            // Logout logic here
-            Alert.alert('Success', 'You have been logged out');
-          }
-        }
-      ]
-    );
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // After successful logout, router will redirect to login
+      // via the _layout.tsx effect
+    } catch (error) {
+      console.error('Error logging out:', error);
+      Alert.alert('Error', 'Failed to log out. Please try again.');
+    }
   };
 
   // Render a setting item
@@ -59,9 +143,14 @@ export default function SettingsScreen() {
     icon: React.ReactNode, 
     title: string, 
     description: string,
-    control: React.ReactNode
+    control: React.ReactNode,
+    onPress?: () => void
   ) => (
-    <View style={styles.settingItem}>
+    <TouchableOpacity 
+      style={styles.settingItem} 
+      onPress={onPress}
+      disabled={!onPress}
+    >
       <View style={styles.settingIconContainer}>
         {icon}
       </View>
@@ -72,7 +161,7 @@ export default function SettingsScreen() {
       <View style={styles.settingControl}>
         {control}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -111,18 +200,6 @@ export default function SettingsScreen() {
               thumbColor={darkMode ? '#4361ee' : '#f4f4f5'}
             />
           )}
-          
-          {renderSettingItem(
-            <Shield size={22} color="#4361ee" />,
-            "Location Tracking",
-            "Allow the app to track bus location",
-            <Switch 
-              value={locationTracking}
-              onValueChange={toggleLocationTracking}
-              trackColor={{ false: '#e5e7eb', true: '#93c5fd' }}
-              thumbColor={locationTracking ? '#4361ee' : '#f4f4f5'}
-            />
-          )}
         </View>
         
         <View style={styles.section}>
@@ -132,7 +209,8 @@ export default function SettingsScreen() {
             <User size={22} color="#4361ee" />,
             "School Information",
             schoolName || "Manage your school details",
-            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />,
+            openSchoolInfoModal
           )}
           
           {renderSettingItem(
@@ -168,6 +246,13 @@ export default function SettingsScreen() {
           <ThemedText style={styles.copyrightText}>© 2025 BusTrak Team</ThemedText>
         </View>
       </ScrollView>
+      
+      {/* School Info Modal */}
+      <SchoolInfoModal 
+        isVisible={isSchoolInfoModalVisible}
+        onClose={closeSchoolInfoModal}
+        schoolData={schoolData}
+      />
     </View>
   );
 }
@@ -284,5 +369,73 @@ const styles = StyleSheet.create({
   copyrightText: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderRadius: 12,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.15)',
+      }
+    })
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalScrollView: {
+    flex: 1,
+  },
+  infoSection: {
+    flex: 1,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  infoLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Theme.colors.text.secondary,
+  },
+  infoValue: {
+    fontSize: 15,
+    color: Theme.colors.text.primary,
+  },
+  closeModalButton: {
+    backgroundColor: '#4361ee',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  closeModalButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });

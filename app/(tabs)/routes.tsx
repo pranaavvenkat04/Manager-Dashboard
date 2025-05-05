@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, TextInput, Alert, Animated, Platform, Modal } from 'react-native';
-import { Search, Plus, Filter, Trash2, X, Calendar } from 'lucide-react';
+import { Search, Plus, Filter, Trash2, X, Calendar, Edit } from 'lucide-react';
 import { router } from 'expo-router';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -13,183 +14,158 @@ import { routesFirebaseMethods, formatDate } from '@/utils/FirebaseUtils';
 import RouteExceptionsModal from '@/components/modals/RouteExceptionsModal';
 
 import { RouteData, RouteSchedule, ScheduleException } from '@/types/RouteTypes';
+import { getCurrentSchool } from '@/utils/firebase';
+import { db } from '@/utils/firebase';
+import { Theme } from '@/constants/Colors';
 
-// Mock Firebase functions with enhanced route data
-const fetchRoutes = (): Promise<any[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const mockData: any[] = [];
-      for (let i = 1; i <= 10; i++) {
-        // Create a schedule with weekdays for even routes, all days for odd routes
-        const operatingDays = i % 2 === 0 ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
-        
-        // Create some exceptions
-        const exceptions: ScheduleException[] = [];
-        
-        // Add a "no service" exception for even routes
-        if (i % 2 === 0) {
-          const noServiceDate = new Date();
-          noServiceDate.setDate(noServiceDate.getDate() + 7); // 1 week from now
-          exceptions.push({
-            date: noServiceDate,
-            type: 'no_service',
-            reason: 'Holiday'
-          });
-        }
-        
-        // Add a "special service" exception for odd routes
-        if (i % 2 === 1) {
-          const specialServiceDate = new Date();
-          specialServiceDate.setDate(specialServiceDate.getDate() + 14); // 2 weeks from now
-          exceptions.push({
-            date: specialServiceDate,
-            type: 'special_service',
-            reason: 'Special Event'
-          });
-        }
-        
-        // Create effective dates
-        const startDate = new Date();
-        let endDate: Date | undefined = undefined;
-        
-        // Set an end date for even routes
-        if (i % 2 === 0) {
-          endDate = new Date();
-          endDate.setMonth(endDate.getMonth() + 6); // 6 months from now
-        }
-        
-        // Create the schedule object
-        const schedule: RouteSchedule = {
-          operatingDays: operatingDays,
-          exceptions: exceptions,
-          effectiveDates: {
-            startDate: startDate,
-            endDate: endDate
-          }
-        };
-        
-        mockData.push({ 
-          id: `route${i}`, 
-          route_key: `RT${1000+i}`,
-          name: `Route ${i}`, 
-          school_id: 'school1',
-          assigned_driver_id: `driver${i % 3 + 1}`,
-          start_time: '08:00 AM',
-          end_time: '09:15 AM',
-          stops_count: 5 + (i % 5), // Random number of stops between 5-9
-          schedule: schedule
-        });
-      }
-      resolve(mockData);
-    }, 500);
-  });
+// Update fetch functions to use Firebase instead of mock data
+// Looking at two specific functions to edit:
+
+// Update the fetchRoutes function
+const fetchRoutes = async (): Promise<any[]> => {
+  try {
+    const schoolId = await getCurrentSchool();
+    if (!schoolId) {
+      console.log('No school ID available');
+      return [];
+    }
+
+    const routesCollectionRef = collection(db, 'Schools', schoolId, 'Routes');
+    const routesSnapshot = await getDocs(routesCollectionRef);
+    
+    if (routesSnapshot.empty) {
+      console.log('No routes found');
+      return [];
+    }
+
+    return routesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name || 'Unnamed Route',
+        stops: data.stops_count || 0,
+        status: data.active ? 'Active' : 'Inactive',
+        driverId: data.assigned_driver_id || null,
+        driverName: 'Loading...',
+        startTime: data.start_time || '',
+        endTime: data.end_time || '',
+        duration: data.estimated_duration || 0,
+        route_code: data.route_code || doc.id.substring(0, 2) || ''
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching routes:', error);
+    return [];
+  }
+};
+
+// Update the fetchDrivers function
+const fetchDrivers = async (): Promise<{id: string; name: string;}[]> => {
+  try {
+    const schoolId = await getCurrentSchool();
+    if (!schoolId) {
+      console.log('No school ID available');
+      return [];
+    }
+
+    const driversCollectionRef = collection(db, 'Schools', schoolId, 'Drivers');
+    const driversSnapshot = await getDocs(driversCollectionRef);
+    
+    if (driversSnapshot.empty) {
+      console.log('No drivers found');
+      return [];
+    }
+
+    return driversSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name || data.fullName || 'Unnamed Driver'
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching drivers:', error);
+    return [];
+  }
 };
 
 // Fetch route details with schedule data
-const fetchRouteDetails = (routeId: string, schoolId: string): Promise<RouteData> => {
-  return new Promise((resolve) => {
-    // Simulate API delay
-    setTimeout(() => {
-      // Create mock stops based on route ID
-      const stops = [];
-      const stopsCount = 5 + (parseInt(routeId.replace('route', '')) % 5);
+const fetchRouteDetails = async (routeId: string): Promise<RouteData> => {
+  try {
+    const schoolId = await getCurrentSchool();
+    if (!schoolId) {
+      throw new Error('No school ID available');
+    }
+    
+    // Get the route document from the subcollection
+    const routeRef = doc(db, 'Schools', schoolId, 'Routes', routeId);
+    const routeDoc = await getDoc(routeRef);
+    
+    if (!routeDoc.exists()) {
+      throw new Error('Route not found');
+    }
+    
+    const routeData = routeDoc.data();
+    console.log("Fetched route data:", routeData); // Log for debugging
+    
+    // Get the stops for this route if there's a stops subcollection
+    let stops: Array<{
+      id: string;
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      eta: string;
+    }> = [];
+    
+    try {
+      const stopsCollectionRef = collection(db, 'Schools', schoolId, 'Routes', routeId, 'Stops');
+      const stopsSnapshot = await getDocs(stopsCollectionRef);
       
-      for (let i = 1; i <= stopsCount; i++) {
-        stops.push({
-          id: `stop-${routeId}-${i}`,
-          name: `Stop ${i} for ${routeId}`,
-          address: `${100 + i} Main St, New York, NY ${10000 + i}`,
-          lat: 40.7 + (Math.random() * 0.1),
-          lng: -73.9 + (Math.random() * 0.1),
-          eta: `${8 + Math.floor(i/2)}:${(i * 5) % 60 < 10 ? '0' + (i * 5) % 60 : (i * 5) % 60} AM`
-        });
+      stops = stopsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name || '',
+        address: doc.data().address || '',
+        lat: doc.data().latitude || 0,
+        lng: doc.data().longitude || 0,
+        eta: doc.data().eta || ''
+      }));
+    } catch (error) {
+      console.error('Error fetching stops:', error);
+    }
+    
+    // Format the schedule data
+    const schedule: RouteSchedule = {
+      operatingDays: routeData.operating_days || [1, 2, 3, 4, 5],
+      exceptions: routeData.exceptions || [],
+      effectiveDates: {
+        startDate: routeData.effective_start_date ? new Date(routeData.effective_start_date.seconds * 1000) : new Date(),
+        endDate: routeData.effective_end_date ? new Date(routeData.effective_end_date.seconds * 1000) : undefined
       }
-      
-      // Create a schedule based on route ID
-      const routeNum = parseInt(routeId.replace('route', ''));
-      const operatingDays = routeNum % 2 === 0 ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
-      
-      // Create some exceptions
-      const exceptions: ScheduleException[] = [];
-      
-      // Add a "no service" exception for even routes
-      if (routeNum % 2 === 0) {
-        const noServiceDate = new Date();
-        noServiceDate.setDate(noServiceDate.getDate() + 7); // 1 week from now
-        exceptions.push({
-          date: noServiceDate,
-          type: 'no_service',
-          reason: 'Holiday'
-        });
-      }
-      
-      // Add a "special service" exception for odd routes
-      if (routeNum % 2 === 1) {
-        const specialServiceDate = new Date();
-        specialServiceDate.setDate(specialServiceDate.getDate() + 14); // 2 weeks from now
-        exceptions.push({
-          date: specialServiceDate,
-          type: 'special_service',
-          reason: 'Special Event'
-        });
-      }
-      
-      // Create effective dates
-      const startDate = new Date();
-      let endDate: Date | undefined = undefined;
-      
-      // Set an end date for even routes
-      if (routeNum % 2 === 0) {
-        endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 6); // 6 months from now
-      }
-      
-      // Create the schedule object
-      const schedule: RouteSchedule = {
-        operatingDays: operatingDays,
-        exceptions: exceptions,
-        effectiveDates: {
-          startDate: startDate,
-          endDate: endDate
-        }
-      };
-      
-      // Create mock route data
-      const routeData: RouteData = {
-        name: `Route ${routeId.replace('route', '')}`,
-        routeKey: `RT${1000 + parseInt(routeId.replace('route', ''))}`,
-        startTime: '08:00 AM',
-        endTime: '09:15 AM',
-        stops: stops,
-        estimatedDuration: 75, // minutes
-        assignedDriverId: `driver${parseInt(routeId.replace('route', '')) % 3 + 1}`,
-        schedule: schedule
-      };
-      
-      resolve(routeData);
-    }, 800);
-  });
+    };
+    
+    // Return the formatted route data
+    return {
+      name: routeData.name || '',
+      route_key: routeData.route_code || routeData.route_key || '',
+      startTime: routeData.start_time || '',
+      endTime: routeData.end_time || '',
+      stops: stops,
+      estimatedDuration: routeData.estimated_duration || 0,
+      assignedDriverId: routeData.assigned_driver_id || '',
+      schedule: schedule
+    };
+  } catch (error) {
+    console.error('Error fetching route details:', error);
+    throw error;
+  }
 };
 
-const fetchDrivers = (): Promise<{id: string; name: string;}[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const mockData: {id: string; name: string;}[] = [];
-      for (let i = 1; i <= 5; i++) {
-        mockData.push({ 
-          id: `driver${i}`, 
-          name: `Driver ${i}`
-        });
-      }
-      resolve(mockData);
-    }, 300);
-  });
-};
+// Memoized RouteCard component to prevent unnecessary re-renders
+const MemoizedRouteCard = React.memo(RouteCard);
 
 export default function RoutesScreen() {
   const { schoolName } = useSchoolContext();
-  // Use a default schoolId since it's not available in the context
-  const schoolId = 'school1';
   const [routes, setRoutes] = useState<any[]>([]);
   const [filteredRoutes, setFilteredRoutes] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -260,21 +236,8 @@ export default function RoutesScreen() {
     }
   }, [searchQuery, routes]);
 
-  // Action menu handlers
-  const toggleActionMenu = (route: any) => {
-    if (activeRouteId === route.id) {
-      // If this route's menu is already open, close it
-      setActionMenuVisible(false);
-      setActiveRouteId(null);
-    } else {
-      // Otherwise, open this route's menu
-      setSelectedRoute(route);
-      setActiveRouteId(route.id);
-      setActionMenuVisible(true);
-    }
-  };
-
-  const handleEditRoute = async (route: any) => {
+  // Memoize functions that are passed to child components
+  const handleEditRoute = useCallback(async (route: any) => {
     // Close action menu
     setActionMenuVisible(false);
     setActiveRouteId(null);
@@ -285,7 +248,7 @@ export default function RoutesScreen() {
     try {
       // In a real implementation, this would fetch from Firebase
       // For now, we use our mock function
-      const routeData = await fetchRouteDetails(route.id, route.school_id);
+      const routeData = await fetchRouteDetails(route.id);
       
       // Set the route data and show the update modal
       setSelectedRouteData(routeData);
@@ -296,9 +259,9 @@ export default function RoutesScreen() {
     } finally {
       setIsLoadingRouteData(false);
     }
-  };
+  }, []);
 
-  const showDeleteConfirmation = (route: any) => {
+  const showDeleteConfirmation = useCallback((route: any) => {
     // Close action menu
     setActionMenuVisible(false);
     setActiveRouteId(null);
@@ -306,7 +269,25 @@ export default function RoutesScreen() {
     // Set route to delete and show delete modal
     setRouteToDelete(route);
     setDeleteModalVisible(true);
-  };
+  }, []);
+
+  const handleAddNewRoute = useCallback(() => {
+    // Open the add route modal
+    setAddModalVisible(true);
+  }, []);
+
+  // Memoize the renderItem function to prevent rerenders
+  const renderRouteItem = useCallback(({ item }: { item: any }) => (
+    <MemoizedRouteCard
+      route={item}
+      drivers={drivers}
+      onActionMenu={() => {}}
+      activeRouteId={null}
+      actionMenuVisible={false}
+      onEdit={handleEditRoute}
+      onDelete={showDeleteConfirmation}
+    />
+  ), [drivers, handleEditRoute, showDeleteConfirmation]);
 
   const handleDeleteRoute = () => {
     if (!routeToDelete) return;
@@ -323,27 +304,25 @@ export default function RoutesScreen() {
     // Show success message
     Alert.alert('Success', 'Route has been deleted');
   };
-
-  const handleAddNewRoute = () => {
-    // Open the add route modal
-    setAddModalVisible(true);
-  };
   
   // Handle save from modal
-  const handleSaveRoute = (routeData: RouteData) => {
+  const handleSaveRoute = async (routeData: RouteData) => {
     // In a real implementation, this would save to Firebase
     // For now, we'll add it to our local state
+    
+    // Get current school ID
+    const currentSchoolId = await getCurrentSchool();
     
     // Convert route data format from the modal to match our routes format
     const newRoute = {
       id: `route-${Date.now()}`,
-      route_key: routeData.routeKey,
+      route_key: routeData.route_key,
       name: routeData.name,
-      school_id: schoolId || 'school1', // Use current school ID
+      school_id: currentSchoolId || '', // Use current school ID
       assigned_driver_id: routeData.assignedDriverId || '', 
       start_time: routeData.startTime,
       end_time: routeData.endTime,
-      stops_count: routeData.stops.length,
+      stops_count: routeData.stops?.length || 0,
       schedule: routeData.schedule
     };
     
@@ -357,18 +336,22 @@ export default function RoutesScreen() {
   };
   
   // Handle update from modal
-  const handleUpdateRoute = (routeData: RouteData) => {
+  const handleUpdateRoute = async (routeData: RouteData) => {
     // In a real implementation, this would update in Firebase
     // For now, we'll update our local state
     if (selectedRoute) {
+      // Get current school ID
+      const currentSchoolId = await getCurrentSchool();
+      
       const updatedRoute = {
         ...selectedRoute,
         name: routeData.name,
-        route_key: routeData.routeKey,
+        route_key: routeData.route_key,
+        school_id: currentSchoolId || '',
         start_time: routeData.startTime,
         end_time: routeData.endTime,
         assigned_driver_id: routeData.assignedDriverId || '',
-        stops_count: routeData.stops.length,
+        stops_count: routeData.stops?.length || 0,
         schedule: routeData.schedule
       };
       
@@ -407,34 +390,27 @@ export default function RoutesScreen() {
         onRequestClose={() => setDeleteModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.confirmationModal}>
-            <View style={styles.confirmationHeader}>
-              <Trash2 size={24} color="#EF4444" />
-              <ThemedText style={styles.confirmationTitle}>Delete Route</ThemedText>
-            </View>
-            
-            <View style={styles.confirmationContent}>
-              <ThemedText style={styles.confirmationText}>
-                Are you sure you want to delete <ThemedText style={styles.routeNameText}>{routeToDelete.name}</ThemedText>?
-              </ThemedText>
-              <ThemedText style={styles.confirmationSubtext}>
-                This action cannot be undone. All data associated with this route will be permanently removed.
-              </ThemedText>
-            </View>
-            
-            <View style={styles.confirmationButtons}>
+          <View style={styles.deleteModalContainer}>
+            <ThemedText style={styles.deleteModalTitle}>Delete Route</ThemedText>
+            <ThemedText style={styles.deleteModalText}>
+              Are you sure you want to delete <ThemedText style={styles.routeNameText}>{routeToDelete.name}</ThemedText>?
+            </ThemedText>
+            <ThemedText style={styles.deleteModalText}>
+              This action cannot be undone. All data associated with this route will be permanently removed.
+            </ThemedText>
+            <View style={styles.deleteButtonsContainer}>
               <TouchableOpacity
-                style={styles.cancelButton}
+                style={styles.cancelDeleteButton}
                 onPress={() => setDeleteModalVisible(false)}
               >
-                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+                <ThemedText style={styles.cancelDeleteText}>Cancel</ThemedText>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={styles.deleteButton}
+                style={styles.confirmDeleteButton}
                 onPress={handleDeleteRoute}
               >
-                <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
+                <ThemedText style={styles.confirmDeleteText}>Delete</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -456,7 +432,7 @@ export default function RoutesScreen() {
               width: '24px',
               height: '24px',
               border: '3px solid rgba(0, 0, 0, 0.1)',
-              borderTopColor: '#4361ee',
+              borderTopColor: Theme.colors.primary,
               borderRadius: '50%',
               animation: 'spin 1s linear infinite',
             }} />
@@ -501,7 +477,7 @@ export default function RoutesScreen() {
         
         // Add the exception if it doesn't already exist for the same date
         const existingExceptionIndex = route.schedule.exceptions.findIndex(
-          (ex) => ex.date.toDateString() === exception.date.toDateString()
+          (ex: ScheduleException) => ex.date.toDateString() === exception.date.toDateString()
         );
         
         if (existingExceptionIndex >= 0) {
@@ -539,18 +515,125 @@ export default function RoutesScreen() {
     }
   };
 
+  // Update the UpdateRouteModal props to include onDelete
+  const handleUpdateRouteModalDelete = (routeData: RouteData) => {
+    // Get the route to delete based on the routeData
+    const routeToDelete = routes.find(r => r.id === routeData.id);
+    if (routeToDelete) {
+      showDeleteConfirmation(routeToDelete);
+    }
+    // Close the update modal
+    setUpdateModalVisible(false);
+  };
+
+  // Action menu handlers
+  const toggleActionMenu = useCallback((route: any) => {
+    if (activeRouteId === route.id) {
+      // If this route's menu is already open, close it
+      setActionMenuVisible(false);
+      setActiveRouteId(null);
+    } else {
+      // Otherwise, open this route's menu
+      setSelectedRoute(route);
+      setActiveRouteId(route.id);
+      setActionMenuVisible(true);
+    }
+  }, [activeRouteId]);
+
+  const handleDeleteExceptionsByDate = async (date: Date) => {
+    // Show loading state
+    setIsLoading(true);
+    
+    try {
+      // Create a copy of all routes to update
+      const updatedRoutes = [...routes];
+      
+      // Loop through each route and remove exceptions for the specified date
+      for (let i = 0; i < updatedRoutes.length; i++) {
+        const route = updatedRoutes[i];
+        
+        // Skip routes without schedules or exceptions
+        if (!route.schedule || !route.schedule.exceptions) continue;
+        
+        // Filter out exceptions for the specified date
+        route.schedule.exceptions = route.schedule.exceptions.filter(
+          (ex: ScheduleException) => ex.date.toDateString() !== date.toDateString()
+        );
+      }
+      
+      // Update the state with the new routes
+      setRoutes(updatedRoutes);
+      setFilteredRoutes(updatedRoutes);
+      
+      // Show success message
+      Alert.alert('Success', 'Exceptions for the specified date have been removed from all routes');
+    } catch (error) {
+      console.error('Error deleting exceptions by date:', error);
+      Alert.alert('Error', 'Failed to delete exceptions. Please try again.');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteExceptionsByDateRange = async (startDate: Date, endDate: Date) => {
+    // Show loading state
+    setIsLoading(true);
+    
+    try {
+      // Create a copy of all routes to update
+      const updatedRoutes = [...routes];
+      
+      // Set start/end dates to the beginning/end of their respective days
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      
+      // Loop through each route and remove exceptions within the date range
+      for (let i = 0; i < updatedRoutes.length; i++) {
+        const route = updatedRoutes[i];
+        
+        // Skip routes without schedules or exceptions
+        if (!route.schedule || !route.schedule.exceptions) continue;
+        
+        // Filter out exceptions within the date range
+        route.schedule.exceptions = route.schedule.exceptions.filter(
+          (ex: ScheduleException) => {
+            const exDate = new Date(ex.date);
+            return exDate < start || exDate > end;
+          }
+        );
+      }
+      
+      // Update the state with the new routes
+      setRoutes(updatedRoutes);
+      setFilteredRoutes(updatedRoutes);
+      
+      // Show success message
+      Alert.alert('Success', `Exceptions between ${startDate.toLocaleDateString()} and ${endDate.toLocaleDateString()} have been removed from all routes`);
+    } catch (error) {
+      console.error('Error deleting exceptions by date range:', error);
+      Alert.alert('Error', 'Failed to delete exceptions. Please try again.');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <View style={styles.mainContent}>
       {/* Page Title */}
       <View style={styles.pageHeader}>
         <ThemedText style={styles.pageTitle}>Routes</ThemedText>
-        <ThemedText style={styles.schoolName}>{schoolName}</ThemedText>
+        <ThemedText style={styles.schoolName}>{schoolName || ''}</ThemedText>
       </View>
       
-      {/* Search Bar */}
+      {/* Search and Add Bar */}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" />
+          <Search size={20} color={Theme.colors.text.secondary} />
           <TextInput
             style={[
               styles.searchInput,
@@ -559,24 +642,25 @@ export default function RoutesScreen() {
             placeholder="Search routes..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={Theme.colors.text.tertiary}
           />
         </View>
         
-        {/* Add exception to all routes button */}
+        {/* Exceptions Button */}
         <TouchableOpacity 
           style={styles.exceptionsButton}
           onPress={handleOpenExceptionsModal}
         >
-          <Calendar size={18} color="#4361ee" />
+          <Calendar size={20} color={Theme.colors.text.inverse} />
           <ThemedText style={styles.exceptionsButtonText}>Exceptions</ThemedText>
         </TouchableOpacity>
         
+        {/* Add Route Button */}
         <TouchableOpacity 
           style={styles.addButton}
           onPress={handleAddNewRoute}
         >
-          <Plus size={18} color="white" />
+          <Plus size={20} color={Theme.colors.text.inverse} />
           <ThemedText style={styles.addButtonText}>Add Route</ThemedText>
         </TouchableOpacity>
       </View>
@@ -585,17 +669,7 @@ export default function RoutesScreen() {
       <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
         <FlatList
           data={filteredRoutes}
-          renderItem={({ item }) => (
-            <RouteCard
-              route={item}
-              drivers={drivers}
-              onActionMenu={toggleActionMenu}
-              activeRouteId={activeRouteId}
-              actionMenuVisible={actionMenuVisible}
-              onEdit={handleEditRoute}
-              onDelete={showDeleteConfirmation}
-            />
-          )}
+          renderItem={renderRouteItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           style={styles.list}
@@ -617,6 +691,7 @@ export default function RoutesScreen() {
           visible={updateModalVisible}
           onClose={handleCloseUpdateModal}
           onUpdate={handleUpdateRoute}
+          onDelete={handleUpdateRouteModalDelete}
           route={selectedRouteData}
         />
       )}
@@ -643,6 +718,8 @@ export default function RoutesScreen() {
         isVisible={exceptionsModalVisible}
         onClose={() => setExceptionsModalVisible(false)}
         onApply={handleApplyExceptionToAllRoutes}
+        onDeleteByDate={handleDeleteExceptionsByDate}
+        onDeleteByDateRange={handleDeleteExceptionsByDateRange}
       />
     </View>
   );
@@ -652,23 +729,23 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     flexDirection: 'column',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Theme.colors.background.secondary,
   },
   pageHeader: {
     padding: 24,
     paddingBottom: 12,
-    backgroundColor: 'white',
+    backgroundColor: Theme.colors.background.main,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: Theme.colors.border.light,
   },
   pageTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: Theme.colors.text.primary,
   },
   schoolName: {
     fontSize: 16,
-    color: '#6B7280',
+    color: Theme.colors.text.secondary,
     marginTop: 4,
   },
   contentContainer: {
@@ -678,40 +755,55 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: Theme.colors.background.main,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: Theme.colors.border.light,
+    flexWrap: 'wrap',
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: Theme.colors.background.tertiary,
     borderRadius: 8,
     paddingHorizontal: 12,
-    marginRight: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Theme.colors.border.light,
     height: 40,
+    minWidth: 200,
   },
   searchInput: {
     flex: 1,
     height: 40,
     fontSize: 15,
-    color: '#1F2937',
+    color: Theme.colors.text.primary,
     marginLeft: 8,
+  },
+  exceptionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.primary,
+    borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 16,
+    marginLeft: 12,
+  },
+  exceptionsButtonText: {
+    color: Theme.colors.text.inverse,
+    fontWeight: '500',
+    marginLeft: 6,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4361ee',
+    backgroundColor: Theme.colors.primary,
     borderRadius: 8,
     height: 40,
     paddingHorizontal: 16,
     marginLeft: 12,
   },
   addButtonText: {
-    color: 'white',
+    color: Theme.colors.text.inverse,
     fontWeight: '500',
     marginLeft: 6,
   },
@@ -719,85 +811,60 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContainer: {
-    paddingVertical: 8,
+    padding: 16,
   },
-  // Delete confirmation modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  confirmationModal: {
-    backgroundColor: 'white',
+  deleteModalContainer: {
+    backgroundColor: Theme.colors.background.main,
     borderRadius: 12,
     padding: 24,
-    width: Platform.OS === 'web' ? 400 : '90%',
-    maxWidth: 500,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  confirmationHeader: {
-    flexDirection: 'row',
+    width: '90%',
+    maxWidth: 450,
     alignItems: 'center',
-    marginBottom: 16,
   },
-  confirmationTitle: {
+  deleteModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
-    marginLeft: 8,
+    color: Theme.colors.text.primary,
+    marginBottom: 16,
+    textAlign: 'center',
   },
-  confirmationContent: {
-    marginBottom: 24,
-  },
-  confirmationText: {
+  deleteModalText: {
     fontSize: 16,
-    color: '#4B5563',
-    marginBottom: 8,
-    lineHeight: 24,
+    color: Theme.colors.text.secondary,
+    marginBottom: 24,
+    textAlign: 'center',
   },
-  routeNameText: {
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  confirmationSubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-  },
-  confirmationButtons: {
+  deleteButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    width: '100%',
   },
-  cancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: '#F3F4F6',
+  cancelDeleteButton: {
+    backgroundColor: Theme.colors.background.tertiary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
     marginRight: 12,
   },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
+  cancelDeleteText: {
+    color: Theme.colors.text.primary,
+    fontWeight: '500',
   },
-  deleteButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: '#EF4444',
+  confirmDeleteButton: {
+    backgroundColor: Theme.colors.error,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
   },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
+  confirmDeleteText: {
+    color: Theme.colors.text.inverse,
+    fontWeight: '500',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -829,21 +896,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#4B5563',
   },
-  exceptionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    height: 40,
-    paddingHorizontal: 16,
-    marginLeft: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  exceptionsButtonText: {
-    color: '#4361ee',
-    fontWeight: '500',
-    fontSize: 14,
-    marginLeft: 6,
+  routeNameText: {
+    fontWeight: 'bold',
+    color: '#1F2937',
   },
 });

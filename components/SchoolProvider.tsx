@@ -1,5 +1,7 @@
 import React, { ReactNode, createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db, getCurrentSchool, getSchool } from '@/utils/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Define context type with all school-related data
 interface SchoolContextType {
@@ -16,9 +18,17 @@ interface SchoolData {
   code: string;
 }
 
+// School type from Firebase
+interface FirebaseSchool {
+  id: string;
+  name?: string;
+  schoolCode?: string;
+  [key: string]: any;
+}
+
 // Create context with default values
 const SchoolContext = createContext<SchoolContextType>({
-  schoolName: 'School',
+  schoolName: '',
   schoolId: '',
   schoolCode: '',
   isLoading: true,
@@ -37,9 +47,9 @@ interface SchoolProviderProps {
 
 export function SchoolProvider({ children }: SchoolProviderProps) {
   const [schoolData, setSchoolData] = useState<SchoolData>({
-    name: 'NYIT',
-    id: 'school1',
-    code: 'NYT001',
+    name: '',
+    id: '',
+    code: '',
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -56,20 +66,27 @@ export function SchoolProvider({ children }: SchoolProviderProps) {
           const parsedData = JSON.parse(storedData);
           setSchoolData(parsedData);
         } else {
-          // If no stored data, fetch from API (mocked for now)
-          // In a real app, you might fetch this from Firebase or another backend
-          setTimeout(() => {
-            const mockData = {
-              name: 'NYIT',
-              id: 'school1',
-              code: 'NYT001',
-            };
-            setSchoolData(mockData);
+          // Get the current school ID
+          const schoolId = await getCurrentSchool();
+          
+          if (schoolId) {
+            // Fetch school details from Firestore
+            const school = await getSchool(schoolId) as FirebaseSchool;
             
-            // Store for future use
-            AsyncStorage.setItem(SCHOOL_INFO_KEY, JSON.stringify(mockData))
-              .catch(err => console.error('Error saving school data:', err));
-          }, 500);
+            if (school) {
+              const schoolInfo = {
+                name: school.name || '',
+                id: school.id || '',
+                code: school.schoolCode || '',
+              };
+              
+              setSchoolData(schoolInfo);
+              
+              // Store for future use
+              AsyncStorage.setItem(SCHOOL_INFO_KEY, JSON.stringify(schoolInfo))
+                .catch(err => console.error('Error saving school data:', err));
+            }
+          }
         }
       } catch (error) {
         console.error('Error loading school info:', error);

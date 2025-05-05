@@ -1,20 +1,27 @@
-import React, { ReactNode, useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback, Platform } from 'react-native';
+import React, { ReactNode, useEffect, useState, useRef, useContext } from 'react';
+import { StyleSheet, View, TouchableOpacity, Animated, TouchableWithoutFeedback, Platform, Modal } from 'react-native';
 import { usePathname, router } from 'expo-router';
 import { LayoutDashboard, Package, MapPin, Users, Bell, HelpCircle, Settings, User, LogOut, Bus } from 'lucide-react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable } from 'react-native';
+import { signOut, getCurrentUserSchoolData } from '../utils/firebase';
+import { AuthContext } from '../app/_layout';
+import { Theme } from '../constants/Colors';
 
 import { ThemedText } from './ThemedText';
 
 // Define props with schoolName to pass to children components
 interface SchoolContextProps {
-  schoolName?: string;
+  schoolName: string;
+  userName: string;
 }
 
 // Create context for school data
-const SchoolContext = React.createContext<SchoolContextProps>({});
+const SchoolContext = React.createContext<SchoolContextProps>({
+  schoolName: '',
+  userName: ''
+});
 
 // Hook to access school context
 export const useSchoolContext = () => React.useContext(SchoolContext);
@@ -54,26 +61,26 @@ const BOTTOM_ROUTES: RouteItem[] = [
 // Storage key for sidebar state
 const SIDEBAR_STATE_KEY = 'bustrak_sidebar_open';
 
+// Define constant for sidebar background color to easily update everywhere
+const SIDEBAR_BG_COLOR = Theme.colors.primary; // Using primary blue from app theme
+const SIDEBAR_ACTIVE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; // Semi-transparent white
+const SIDEBAR_HOVER_BG_COLOR = 'rgba(255, 255, 255, 0.1)'; // Semi-transparent white
+
 export default function PersistentSidebar({ children }: PersistentSidebarProps) {
   const { top, bottom } = useSafeAreaInsets();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [userName, setUserName] = useState('Jane Doe');
-  const [schoolName, setSchoolName] = useState('NYIT');
-  const [showLogout, setShowLogout] = useState(false);
-  const [hoverStates, setHoverStates] = useState<{[key: string]: boolean}>({});
-  const [profileHover, setProfileHover] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [schoolName, setSchoolName] = useState('');
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  
+  // Get auth context data
+  const authContext = useContext(AuthContext);
   
   // Use refs for animations to maintain consistent behavior
   const sidebarWidth = useRef(new Animated.Value(230)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
-  const logoutOpacity = useRef(new Animated.Value(0)).current;
-  const logoutScale = useRef(new Animated.Value(0.85)).current;
   
-  // Calculate position for logout button based on sidebar state
-  const logoutPositionX = useRef(new Animated.Value(sidebarOpen ? 210 : 70)).current;
-  const logoutPositionY = useRef(new Animated.Value(10)).current;
-
   // Load saved sidebar state on component mount
   useEffect(() => {
     const loadSidebarState = async () => {
@@ -84,7 +91,6 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           setSidebarOpen(isOpen);
           sidebarWidth.setValue(isOpen ? 230 : 70);
           textOpacity.setValue(isOpen ? 1 : 0);
-          logoutPositionX.setValue(isOpen ? 210 : 70);
         }
       } catch (error) {
         console.error('Error loading sidebar state:', error);
@@ -92,31 +98,30 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     };
     
     loadSidebarState();
-    
-    // Fetch user profile and school data
-    const fetchData = async () => {
-      try {
-        // Mock API calls - in real app, these would be Firebase queries
-        setTimeout(() => {
-          setUserName('Jane Doe');
-          setSchoolName('NYIT');
-        }, 500);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-    
-    fetchData();
   }, []);
-
-  // Update logout visibility based on profile hover
+  
+  // Load user and school data from auth context
   useEffect(() => {
-    if (profileHover) {
-      showLogoutButton();
-    } else {
-      hideLogout();
+    if (authContext.schoolData) {
+      // Format the name as firstName + initial of lastName with a period
+      const firstName = authContext.schoolData.user.firstName || '';
+      const lastName = authContext.schoolData.user.lastName || '';
+      
+      // Truncate firstName if longer than 15 characters
+      const truncatedFirstName = firstName.length > 15 
+        ? firstName.substring(0, 15) 
+        : firstName;
+      
+      // Get first initial of lastName if available
+      const lastNameInitial = lastName ? `${lastName.charAt(0)}.` : '';
+      
+      // Set the formatted name
+      const formattedName = `${truncatedFirstName} ${lastNameInitial}`.trim();
+      setUserName(formattedName || 'Loading...');
+      
+      setSchoolName(authContext.schoolData.school.name || '');
     }
-  }, [profileHover]);
+  }, [authContext.schoolData]);
 
   // Save sidebar state when it changes
   const saveSidebarState = async (isOpen: boolean) => {
@@ -138,7 +143,7 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
       // Opening the sidebar
       Animated.timing(sidebarWidth, {
         toValue: 230,
-        duration: 250,
+        duration: 200, // Reduced from 250
         useNativeDriver: false,
       }).start();
       
@@ -146,83 +151,41 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
       setTimeout(() => {
         Animated.timing(textOpacity, {
           toValue: 1,
-          duration: 200,
+          duration: 150, // Reduced from 200
           useNativeDriver: true,
         }).start();
-      }, 100);
-      
-      // Update logout button position
-      Animated.timing(logoutPositionX, {
-        toValue: 210,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      }, 50); // Reduced from 100
     } else {
       // Closing the sidebar - first fade out text, then shrink width
       Animated.timing(textOpacity, {
         toValue: 0,
-        duration: 100,
+        duration: 80, // Reduced from 100
         useNativeDriver: true,
       }).start(() => {
         Animated.timing(sidebarWidth, {
           toValue: 70,
-          duration: 200,
+          duration: 150, // Reduced from 200
           useNativeDriver: false,
         }).start();
       });
-      
-      // Update logout button position
-      Animated.timing(logoutPositionX, {
-        toValue: 70,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
     }
     
     setSidebarOpen(newState);
   };
 
-  // Show logout button with animation
-  const showLogoutButton = () => {
-    setShowLogout(true);
-    Animated.parallel([
-      Animated.timing(logoutOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoutScale, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      })
-    ]).start();
-  };
-
-  // Hide logout button with animation
-  const hideLogout = () => {
-    Animated.parallel([
-      Animated.timing(logoutOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoutScale, {
-        toValue: 0.85,
-        duration: 150,
-        useNativeDriver: true,
-      })
-    ]).start(() => {
-      setShowLogout(false);
-    });
-  };
-
-  // Handle hover for items
+  // Handle hover for items - removed unnecessary state updates
   const handleHoverChange = (itemKey: string, isHovering: boolean) => {
-    setHoverStates(prev => ({
-      ...prev,
-      [itemKey]: isHovering
-    }));
+    // Only update state if needed to avoid unnecessary renders
+    if (Platform.OS === 'web') {
+      const element = document.getElementById(itemKey);
+      if (element) {
+        if (isHovering) {
+          element.classList.add('nav-item-hover');
+        } else {
+          element.classList.remove('nav-item-hover');
+        }
+      }
+    }
   };
 
   // Function to navigate to a route
@@ -230,35 +193,51 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
     router.push(path as any);
   };
 
-  // Handle logout
-  const handleLogout = (e: any) => {
+  // Show logout confirmation popup
+  const showLogoutConfirmation = (e: any) => {
     e.stopPropagation(); // Prevent sidebar toggle
-    alert('Logging out...');
-    // Implement actual logout logic here
-    // await firebase.auth().signOut();
-    // router.replace('/login');
+    setLogoutConfirmVisible(true);
+  };
+
+  // Handle logout on confirmation
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // Navigate to login screen after successful logout
+      router.replace('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // You could show an error message here if needed
+    } finally {
+      setLogoutConfirmVisible(false);
+    }
+  };
+
+  // Cancel logout
+  const cancelLogout = () => {
+    setLogoutConfirmVisible(false);
   };
 
   // Find the active route based on pathname
   const activeIndex = [...ROUTES, ...BOTTOM_ROUTES].findIndex(route => 
     pathname === route.path || pathname.startsWith(`${route.path}/`));
 
-  // Render a navigation item
+  // Render a navigation item - optimized to use CSS for hover states
   const renderNavItem = (route: RouteItem, index: number, isBottomNav: boolean = false) => {
     const realIndex = isBottomNav ? index + ROUTES.length : index;
     const isActive = realIndex === activeIndex;
     const itemKey = `nav-${route.path}`;
-    const isHovering = hoverStates[itemKey] || false;
     
     return (
       <Pressable
         key={route.path}
+        id={itemKey}
         style={[
           styles.navItem,
           sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
-          isActive && styles.navItemActive,
-          isHovering && !isActive && styles.navItemHover,
+          isActive && styles.navItemActive
         ]}
+        className={isActive ? 'nav-item-active' : 'nav-item'}
         onPress={(e) => {
           e.stopPropagation(); // Prevent sidebar toggle
           navigateTo(route.path);
@@ -268,7 +247,7 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
       >
         <route.icon 
           size={22} 
-          color={isActive ? '#FFFFFF' : isHovering ? '#FFFFFF' : '#94A3B8'} 
+          color={isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.7)'} 
         />
         
         <Animated.View 
@@ -282,11 +261,48 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
           <ThemedText 
             style={[
               styles.navLabel, 
-              isActive && styles.activeNavLabel,
-              isHovering && !isActive && styles.hoverNavLabel
+              isActive && styles.activeNavLabel
             ]}
           >
             {route.label}
+          </ThemedText>
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
+  // Render logout item
+  const renderLogoutItem = () => {
+    const itemKey = "nav-logout";
+    
+    return (
+      <Pressable
+        key="logout"
+        style={[
+          styles.navItem,
+          sidebarOpen ? styles.navItemExpanded : styles.navItemCollapsed,
+        ]}
+        onPress={showLogoutConfirmation}
+      >
+        <LogOut 
+          size={22} 
+          color="rgba(255, 255, 255, 0.7)" 
+        />
+        
+        <Animated.View 
+          style={{ 
+            opacity: textOpacity, 
+            marginLeft: 14,
+            flex: 1,
+            display: sidebarOpen ? 'flex' : 'none'
+          }}
+        >
+          <ThemedText 
+            style={[
+              styles.navLabel, 
+            ]}
+          >
+            Logout
           </ThemedText>
         </Animated.View>
       </Pressable>
@@ -304,6 +320,20 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
             paddingTop: Platform.OS === 'web' ? 20 : (top || 20) 
           }
         ]}>
+          {/* Add CSS for web hover effects */}
+          {Platform.OS === 'web' && (
+            <style type="text/css">
+              {`
+                .nav-item-hover:not(.nav-item-active) {
+                  background-color: ${SIDEBAR_HOVER_BG_COLOR};
+                }
+                .nav-item-hover:not(.nav-item-active) * {
+                  color: #FFFFFF;
+                }
+              `}
+            </style>
+          )}
+          
           {/* Logo/Brand Header */}
           <View style={styles.header}>
             <Animated.View style={{ 
@@ -334,73 +364,26 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
             {/* Bottom nav items */}
             <View style={styles.bottomNavGroup}>
               {BOTTOM_ROUTES.map((route, index) => renderNavItem(route, index, true))}
+              {renderLogoutItem()}
             </View>
           </View>
           
-          {/* Profile section with animated logout button */}
-          <View style={[
-            styles.profileContainer,
-            { paddingBottom: Platform.OS === 'web' ? 20 : (bottom || 20) }
-          ]}>
-            {/* Main profile section */}
-            <Pressable 
-              onHoverIn={() => setProfileHover(true)}
-              onHoverOut={() => setProfileHover(false)}
-              style={[
-                sidebarOpen ? styles.profileExpanded : styles.profileCollapsed,
-                profileHover && styles.profileHover
-              ]}
-            >
-              <View style={[
-                styles.profileIcon,
-                profileHover && styles.profileIconHover
-              ]}>
-                <User size={20} color="#FFFFFF" />
+          {/* User Profile */}
+          <View style={styles.profileContainer}>
+            <View style={styles.profileContent}>
+              <View style={styles.avatarContainer}>
+                <User size={24} color="#FFF" />
               </View>
               
-              {sidebarOpen && (
-                <Animated.View 
-                  style={{ 
-                    opacity: textOpacity,
-                    marginLeft: 14,
-                    flex: 1
-                  }}
-                >
-                  <ThemedText style={[
-                    styles.profileName,
-                    profileHover && styles.profileNameHover
-                  ]}>
-                    {userName}
-                  </ThemedText>
-                </Animated.View>
-              )}
-            </Pressable>
-            
-            {/* Animated logout button */}
-            {showLogout && (
-              <Animated.View
-                style={[
-                  styles.logoutButtonContainer,
-                  {
-                    opacity: logoutOpacity,
-                    transform: [
-                      { scale: logoutScale },
-                      { translateX: logoutPositionX },
-                      { translateY: logoutPositionY }
-                    ],
-                    position: 'absolute',
-                    zIndex: 100,
-                  }
-                ]}
-              >
-                <TouchableOpacity
-                  style={styles.logoutButton}
-                  onPress={handleLogout}
-                >
-                  <LogOut size={18} color="#FFFFFF" />
-                </TouchableOpacity>
+              <Animated.View style={[styles.profileInfo, { opacity: textOpacity }]}>
+                <ThemedText style={styles.profileName} numberOfLines={1}>
+                  {userName || 'Loading...'}
+                </ThemedText>
+                <ThemedText style={styles.profileRole} numberOfLines={1}>
+                  Manager
+                </ThemedText>
               </Animated.View>
-            )}
+            </View>
           </View>
         </Animated.View>
       </TouchableWithoutFeedback>
@@ -408,10 +391,43 @@ export default function PersistentSidebar({ children }: PersistentSidebarProps) 
       {/* Main content */}
       <View style={styles.content}>
         {/* Use context approach to pass schoolName to children */}
-        <SchoolContext.Provider value={{ schoolName }}>
+        <SchoolContext.Provider value={{ schoolName, userName }}>
           {children}
         </SchoolContext.Provider>
       </View>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={logoutConfirmVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelLogout}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <ThemedText style={styles.modalTitle}>Confirm Logout</ThemedText>
+              <ThemedText style={styles.modalText}>Are you sure you want to logout?</ThemedText>
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={styles.cancelButton} 
+                  onPress={cancelLogout}
+                >
+                  <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.confirmButton} 
+                  onPress={handleLogout}
+                >
+                  <ThemedText style={styles.confirmButtonText}>Logout</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -422,7 +438,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   sidebar: {
-    backgroundColor: '#192549', // Dark blue (matching screenshots)
+    backgroundColor: SIDEBAR_BG_COLOR,
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
@@ -459,14 +475,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
     paddingTop: 16,
+    paddingBottom: 8,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 46,
-    marginBottom: 8,
+    marginBottom: 6,
     borderRadius: 8,
-    cursor: 'pointer', // Add cursor pointer for web
+    cursor: 'pointer',
   },
   navItemExpanded: {
     paddingHorizontal: 16,
@@ -476,88 +493,125 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navItemActive: {
-    backgroundColor: '#304878', // Active item background color
-  },
-  navItemHover: {
-    backgroundColor: 'rgba(48, 72, 120, 0.5)', // Hover background
+    backgroundColor: SIDEBAR_ACTIVE_BG_COLOR,
   },
   navLabel: {
     fontSize: 15,
-    color: '#94A3B8', // Light gray
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   activeNavLabel: {
-    color: '#FFFFFF', // White when active
+    color: '#FFFFFF',
     fontWeight: '500',
-  },
-  hoverNavLabel: {
-    color: '#FFFFFF', // White when hovering
   },
   content: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Theme.colors.background.secondary,
   },
   profileContainer: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
-    paddingTop: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    marginTop: 0,
     position: 'relative',
+    alignItems: 'flex-start',
   },
-  // Expanded profile styles
-  profileExpanded: {
+  profileContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    cursor: 'pointer', // Add cursor pointer for web
+    paddingLeft: 4,
   },
-  // Collapsed profile styles
-  profileCollapsed: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    cursor: 'pointer', // Add cursor pointer for web
-  },
-  profileHover: {
-    backgroundColor: 'rgba(48, 72, 120, 0.5)', // Hover background
-  },
-  profileIcon: {
+  avatarContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#304878',
+    backgroundColor: SIDEBAR_ACTIVE_BG_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileIconHover: {
-    backgroundColor: '#415b94', // Lighter color on hover
+  profileInfo: {
+    marginLeft: 20,
   },
   profileName: {
     fontSize: 14,
     color: 'white',
     fontWeight: '500',
+    marginBottom: 0,
   },
-  profileNameHover: {
-    color: '#FFFFFF', // Brighter white on hover
+  profileRole: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: -2,
   },
-  // Logout button container
-  logoutButtonContainer: {
-    // Position and transform properties are applied in-line
-  },
-  // Logout button
-  logoutButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#304878',
-    alignItems: 'center',
+  modalOverlay: {
+    flex: 1,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
-    cursor: 'pointer', // Add cursor pointer for web
-  }
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+      }
+    })
+  },
+  modalContainer: {
+    backgroundColor: Theme.colors.background.main,
+    borderRadius: 12,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.15)',
+      }
+    })
+  },
+  modalContent: {
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Theme.colors.text.primary,
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 16,
+    color: Theme.colors.text.secondary,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  cancelButton: {
+    backgroundColor: Theme.colors.background.tertiary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Theme.colors.text.secondary,
+  },
+  confirmButton: {
+    backgroundColor: Theme.colors.error,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'white',
+  },
 });

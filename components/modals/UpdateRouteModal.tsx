@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Modal, 
@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Alert,
   Animated,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { X } from 'lucide-react';
+import { X, Trash2, ChevronDown } from 'lucide-react';
 
 import { ThemedText } from '@/components/ThemedText';
 import RouteDetailsForm from '@/components/routes/forms/RouteDetailsForm';
@@ -29,11 +31,13 @@ import {
 import { validateRouteForm } from '@/utils/ValidationUtils';
 import { calculateRouteTimings, fetchDrivers } from '@/utils/RouteUtils';
 import styles from '@/styles/RouteModalStyles';
+import { Theme } from '@/constants/Colors';
 
 interface UpdateRouteModalProps {
   visible: boolean;
   onClose: () => void;
   onUpdate: (routeData: RouteData) => void;
+  onDelete: (routeData: RouteData) => void;
   route?: RouteData;
 }
 
@@ -41,7 +45,7 @@ interface UpdateRouteModalProps {
  * Modal component for updating an existing route
  * Reuses the same components as AddRouteModal
  */
-const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModalProps) => {
+const UpdateRouteModal = ({ visible, onClose, onUpdate, onDelete, route }: UpdateRouteModalProps) => {
   // Form state - initialized with existing route data if available
   const [routeName, setRouteName] = useState('');
   const [routeKey, setRouteKey] = useState('');
@@ -458,7 +462,7 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
           <View style={styles.modalHeader}>
             <ThemedText style={styles.modalTitle}>Update Route</ThemedText>
             <TouchableOpacity style={styles.closeButton} onPress={onClose} className="closeButton">
-              <X size={24} color="#6B7280" />
+              <X size={24} color={Theme.colors.text.secondary} />
             </TouchableOpacity>
           </View>
           
@@ -475,7 +479,7 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
                 onPress={() => setShowErrorMessage(false)}
                 className="closeErrorButton"
               >
-                <X size={18} color="#B91C1C" />
+                <X size={18} color={Theme.colors.error} />
               </TouchableOpacity>
             </View>
           )}
@@ -562,38 +566,50 @@ const UpdateRouteModal = ({ visible, onClose, onUpdate, route }: UpdateRouteModa
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
+              style={styles.deleteButton}
+              onPress={() => route && onDelete(route)}
               disabled={isSaving}
-              className="cancelButton"
+              className="deleteButton"
             >
-              <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              <Trash2 size={18} color={Theme.colors.error} />
+              <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
             </TouchableOpacity>
             
-            <TouchableOpacity
-              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-              onPress={handleUpdate}
-              disabled={isSaving}
-              className="saveButton"
-            >
-              {isSaving ? (
-                <View style={styles.savingContainer}>
-                  {/* Simple loading spinner for web */}
-                  <div className="spinner" style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '8px'
-                  }}></div>
-                  <ThemedText style={styles.saveButtonText}>Updating...</ThemedText>
-                </View>
-              ) : (
-                <ThemedText style={styles.saveButtonText}>Update Route</ThemedText>
-              )}
-            </TouchableOpacity>
+            <View style={styles.rightButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={onClose}
+                disabled={isSaving}
+                className="cancelButton"
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                onPress={handleUpdate}
+                disabled={isSaving}
+                className="saveButton"
+              >
+                {isSaving ? (
+                  <View style={styles.savingContainer}>
+                    {/* Simple loading spinner for web */}
+                    <div className="spinner" style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      animation: 'spin 1s linear infinite',
+                      marginRight: '8px'
+                    }}></div>
+                    <ThemedText style={styles.saveButtonText}>Updating...</ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText style={styles.saveButtonText}>Update Route</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
